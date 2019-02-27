@@ -89,8 +89,8 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
             transforms.Normalize((.5, .5, .5), (.5, .5, .5))
         ])
 
-        self.A_dir = os.path.join('./monet2photo', 'trainA')
-        self.B_dir = os.path.join('./monet2photo', 'trainB')
+        self.A_dir = os.path.join('monet2photo', 'trainA')
+        self.B_dir = os.path.join('monet2photo', 'trainB')
         self.A_paths = os.listdir(self.A_dir)
         self.B_paths = os.listdir(self.B_dir)
         self.A_size = len(self.A_paths)
@@ -268,6 +268,9 @@ class CycleGAN:
         self.lambdaIdt = lambdaIdt
         self.save_dir = save_dir
 
+        self.true_label = torch.tensor(1.)
+        self.false_label = torch.tensor(0.)
+
         # need to add data parallel code
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -316,10 +319,12 @@ class CycleGAN:
         self.netD_A       = self.netD_A.to(self.device)
         self.netD_B       = self.netD_B.to(self.device)
         self.criterionGAN = self.criterionGAN.to(self.device)
+        self.true_label   = self.true_label.to(self.device)
+        self.false_label  = self.false_label.to(self.device)
 
     def backward_G(self):
-        self.loss_G_A     = self.criterionGAN(self.netD_A(self.fakeB), 1.)
-        self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), 0.)
+        self.loss_G_A     = self.criterionGAN(self.netD_A(self.fakeB), self.true_label)
+        self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), self.false_label)
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
         self.loss_cycle_B = self.criterionCycle(self.recoB, self.realB)
         self.loss_idt_A   = self.criterionIdt(self.idtA, self.realB)
@@ -339,8 +344,8 @@ class CycleGAN:
     def compute_loss_D_basic(self, netD, real, fake):
         pred_real = netD(real)
         pred_fake = netD(fake.detach())
-        loss_D_real = self.criterionGAN(pred_real, 1.)
-        loss_D_fake = self.criterionGAN(pred_fake, 0.)
+        loss_D_real = self.criterionGAN(pred_real, self.true_label)
+        loss_D_fake = self.criterionGAN(pred_fake, self.false_label)
         loss_D = (loss_D_real + loss_D_fake) / 2
         return loss_D
 
@@ -408,28 +413,29 @@ def print_losses(epoch, iters, t_comp, losses):
     """
     total_iters = epoch * opt.batch_size + iters
     if total_iters % opt.display_freq:
-        message = f'(epoch: {epoch}, iters: {iters}, time: {t_comp:.3f})  '
+        message = f'(epoch: {epoch:3d}, iters: {iters:3d}, time: {t_comp:.3f})  '
         for name, loss in losses.items():
-            message += f'{name}: {loss:.3f} '
+            message += f'{" |  D" if name is "D" else name}: {loss:.3f} '
         print(message)
 
 
-########################## Monet2Photo Full Implementation ##########################
-dataset = Monet2PhotoDataset()
-dataloader = torch.utils.data.DataLoader(
-    dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
+if __name__ == '__main__':
+    ########################## Monet2Photo Full Implementation ##########################
+    dataset = Monet2PhotoDataset()
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
-model = CycleGAN()
+    model = CycleGAN()
 
-print_options()
-print('Let\'s begin the training!\n')
-for epoch in range(opt.n_epochs):
-    for batch_idx, (dataA, dataB) in enumerate(dataloader):
-        t0 = time.time()
-        model.forward(dataA, dataB)
-        model.backward()
-        t1 = time.time()
-        print_losses(epoch, batch_idx, (t0 - t1) / len(dataA), model.get_current_losses())
-    model.update_learning_rate()
+    print_options()
+    print('Let\'s begin the training!\n')
+    for epoch in range(opt.n_epochs):
+        for batch_idx, (dataA, dataB) in enumerate(dataloader):
+            t0 = time.time()
+            model.forward(dataA, dataB)
+            model.backward()
+            t1 = time.time()
+            print_losses(epoch, batch_idx, (t0 - t1) / len(dataA), model.get_current_losses())
+        model.update_learning_rate()
 
-# todo: add the test code both in and out of the loop
+    # todo: add the test code both in and out of the loop
