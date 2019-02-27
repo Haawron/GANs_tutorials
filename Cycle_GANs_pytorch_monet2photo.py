@@ -11,7 +11,7 @@ from PIL import Image
 
 
 class Options:
-    batch_size = 1
+    batch_size = 2
     image_pool_size = 50
     learning_rate = 2e-4
     betas = (.5, .999)
@@ -403,19 +403,21 @@ class CycleGAN:
         print(f'learning rate = {lr:.7f}')
 
 
-def print_losses(epoch, iters, t_comp, losses):
+def print_losses(epoch, iters, t_comp, losses, data_length):
     """Print the current losses and the computational time
 
     :param epoch: current epoch
     :param iters: current training iteration during this epoch
     :param t_comp: computational time per data point
     :param losses: training losses normalized by batch size
+    :param data_length: total data size defined by its dataloader
     """
     total_iters = epoch * opt.batch_size + iters
     if total_iters % opt.display_freq:
-        message = f'(epoch: {epoch:3d}, iters: {iters:3d}, time: {t_comp:.3f})  '
+        message = f'(epoch: {epoch:3d}, iters: {iters:4d}/{data_length}, time: {t_comp:.3f}s)  '
         for name, loss in losses.items():
-            message += f'{" |  D" if name is "D" else name}: {loss:.3f} '
+            loss_format = '6.3f' if name is 'G' else '.3f'
+            message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
         print(message)
 
 
@@ -435,7 +437,8 @@ if __name__ == '__main__':
             model.forward(dataA, dataB)
             model.backward()
             t1 = time.time()
-            print_losses(epoch, batch_idx, (t0 - t1) / len(dataA), model.get_current_losses())
+            print_losses(epoch, batch_idx, (t1 - t0) / len(dataA),
+                         model.get_current_losses(), len(dataloader))
         model.update_learning_rate()
 
     # todo: add the test code both in and out of the loop
