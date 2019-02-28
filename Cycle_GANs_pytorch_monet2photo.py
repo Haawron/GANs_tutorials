@@ -1,5 +1,5 @@
 """
-    One-File CycleGANs
+    One-File CycleGANs (monet2photo task)
 
     This code was created by Hyeo-Geon Lee (Owen Lee)
     to offer beginners of GANs to easier way to absorb the code.
@@ -32,35 +32,32 @@ from PIL import Image
 
 
 class Options:
-    batch_size = 2
-    image_pool_size = 50
+    """This class makes the code similar to the original one (with argparse)"""
+    batch_size = 1
+    image_pool_size = 50  # the size of image buffer that stores previously generated images
     learning_rate = 2e-4
     betas = (.5, .999)
     n_epochs = 200
     ngf = 64  # #filters in the last conv layer
     ndf = 64  # #filters in the last conv layer
-    isTrain = True
     # save_dir = './checkpoints'
-    lambdaA = 10.
-    lambdaB = 10.
-    lambdaIdt = .5
-    load_size = 286
-    begin_decay = 100
-    display_freq = 400
+    lambdaA = 10.  # coefficient of cycle loss
+    lambdaB = 10.  # coefficient of cycle loss
+    lambdaIdt = .5  # coefficient of identity loss
+    load_size = 286  # scale images to this size
+    crop_size = 256  # then crop to this size
+    begin_decay = 100  # #epoch beginning to decay
+    display_freq = 400  # iteration frequency of showing training results on screen
 
 
 opt = Options()
 
 
-def print_options():
-    print(f'\n\n{" OPTIONS ":=^31}')
-    for k, v in Options.__dict__.items():
-        if not k.startswith('__'):  # not for built-in members
-            print(f'{k:>15}:{v}')
-    print(f'{" END ":=^31}\n\n')
-
-
 def resblock(dim):
+    """Residual block unit of the ResNet
+
+    :param dim: the number of input channels of this layer
+    """
 
     return nn.Sequential(
 
@@ -77,16 +74,18 @@ def resblock(dim):
 
 
 def init_net(net):
+    """Apply the weight initialization method through the all layers of the net
+
+    :return: initialized net
+    """
     def init_func(m):
         if type(m) is nn.Conv2d:
-            nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal 은 deprecate 됨
+            nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal has been deprecated
         elif type(m) is nn.BatchNorm2d:
             nn.init.normal_(m.weight.data, mean=1., std=.02)
             nn.init.constant_(m.bias.data, val=0.)
 
-    # net의 각 layer에 recursive하게 적용됨
-    # net 자체에도 적용되기 때문에 init_func에서 if로 막아줘야댐
-    return net.apply(init_func)  # 이거 return 값 있음?
+    return net.apply(init_func)  # apply recursively to the net
 
 
 def define_G(ngf):
@@ -98,8 +97,14 @@ def define_D(ndf):
 
 
 class Monet2PhotoDataset(torch.utils.data.Dataset):
+    """The Dataset for the task converting Monet paintings to photo"""
 
     def __init__(self, load_size=286, crop_size=256):
+        """Brings and stores the paths of images
+
+        :param load_size: scale images to this size
+        :param crop_size: then crop to this size
+        """
         super().__init__()
 
         self.transforms = transforms.Compose([
@@ -118,9 +123,10 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
         self.B_size = len(self.B_paths)
 
     def __getitem__(self, index) -> tuple:
-        """
+        """Randomly get image set from each domain A, B
+
         :param index: given random integer from DataLoader for data indexing,
-                        but I'll ignore in this case.
+                        but I'll ignore it in this case
         :return: Returns a tuple which contains A, B image tensors
         """
 
@@ -140,14 +146,9 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
         return max(self.A_size, self.B_size)
 
 
+# This class was copied from junyanz's code. I didn't touch anything.
 class ImagePool:
-    """
-    1. 풀이 비어 있으면 생성된 이미지를 저장 (크기는 batch_size), return 이미지에는 새 이미지 저장
-    2. 풀 차있으면 새 이미지마다 1/2 확률로 풀에서 하나 빼서 새 이미지 박음, return에는 구 이미지 저장
-    3. 1/2 확률이 안되면 새 이미지 저장
-    4. 리턴할 거 텐서로 concat
-
-    This class implements an image buffer that stores previously generated images.
+    """This class implements an image buffer that stores previously generated images.
 
     This buffer enables us to update discriminators using a history of generated images
     rather than the ones produced by the latest generators.
@@ -199,13 +200,14 @@ class ImagePool:
 
 
 class Generator(nn.Module):
+    """The generator which uses 9 residual blocks"""
 
     def __init__(self, ngf=64):
         super().__init__()
 
         self.model = nn.Sequential(
 
-            # keeps the feature size
+            # keeps feature size
             nn.ReflectionPad2d(3),
             nn.Conv2d(      3,     ngf, kernel_size=7, stride=1, padding=0, bias=True),
             nn.InstanceNorm2d(ngf),
@@ -230,7 +232,7 @@ class Generator(nn.Module):
             nn.InstanceNorm2d(ngf),
             nn.ReLU(inplace=True),
 
-            # keeps the feature size
+            # keeps feature size
             nn.ReflectionPad2d(3),
             nn.Conv2d(ngf, 3, kernel_size=7, padding=0),
             nn.Tanh()
@@ -242,6 +244,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
+    """Discriminator based on 70x70 PatchGAN"""
 
     def __init__(self, ndf=64):
         super().__init__()
@@ -249,18 +252,18 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(
 
             nn.Conv2d(      3,     ndf, kernel_size=4, stride=2, padding=1, bias=True),
-            nn.LeakyReLU(.2, True),
+            nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(    ndf, 2 * ndf, kernel_size=4, stride=2, padding=1, bias=True),
             nn.InstanceNorm2d(2 * ndf),
-            nn.LeakyReLU(.2, True),
+            nn.LeakyReLU(.2, inplace=True),
             nn.Conv2d(2 * ndf, 4 * ndf, kernel_size=4, stride=2, padding=1, bias=True),
             nn.InstanceNorm2d(2 * ndf),
-            nn.LeakyReLU(.2, True),
+            nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(4 * ndf, 8 * ndf, kernel_size=4, stride=1, padding=1, bias=True),
             nn.InstanceNorm2d(8 * ndf),
-            nn.LeakyReLU(.2, True),
+            nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(8 * ndf,       1, kernel_size=4, stride=1, padding=1, bias=True)
 
@@ -271,6 +274,10 @@ class Discriminator(nn.Module):
 
 
 class CycleGAN:
+    """GANs which use cycle loss to make generators to map the image
+     using meaningful connections between domains, which keeps content of the image
+     so that generators can train how to do style-transfer without paired dataset.
+    """
 
     def __init__(self, batch_size=1, lr=2e-4, betas=(.5, .999), n_epochs=200,
                  ngf=64, ndf=64, save_dir='./checkpoints',
@@ -302,6 +309,7 @@ class CycleGAN:
         self.define_schedulers()
 
     def define_nets(self):
+        """Define generators and discriminators for both directions"""
         self.netG_A = define_G(self.ngf)
         self.netG_B = define_G(self.ngf)
         self.netD_A = define_D(self.ndf)
@@ -311,21 +319,32 @@ class CycleGAN:
         self.D_params = list(self.netD_A.parameters()) + list(self.netD_B.parameters())
 
     def define_criterions(self):
+        """Define criterions of losses
+        LSGAN loss for GAN losses, L1 loss for cycle, identity losses
+
+        Identity loss is used only for monet2photo task to keep the color context
+        If you missed this in the paper, refer to section [5.2 - photo generation from paintings]
+        """
         self.criterionGAN = nn.MSELoss()  # LSGAN losses
         self.criterionCycle = nn.L1Loss()
         self.criterionIdt = nn.L1Loss()
 
     def define_optimizers(self):
+        """Define optimizers"""
         self.optimizerG = optim.Adam(self.G_params, lr=opt.learning_rate, betas=opt.betas)
         self.optimizerD = optim.Adam(self.D_params, lr=opt.learning_rate, betas=opt.betas)
 
     def define_schedulers(self):
+        """Define schedulers
+        for <100 epoch, maintain initial learning rate
+        and for >=100 epoch, linearly decay to 0"""
         def lambda_rule(epoch):
             return min(1., (epoch - opt.n_epochs) / (opt.begin_decay - opt.n_epochs + 1))
         self.schedulers = [optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
                            for optimizer in [self.optimizerG, self.optimizerD]]
 
     def move_to(self):
+        """Move Tensors to cuda if available"""
         self.netG_A       = self.netG_A.to(self.device)
         self.netG_B       = self.netG_B.to(self.device)
         self.netD_A       = self.netD_A.to(self.device)
@@ -335,6 +354,7 @@ class CycleGAN:
         self.false_label  = self.false_label.to(self.device)
 
     def backward_G(self):
+        """Compute losses and gradients"""
         self.loss_G_A     = self.criterionGAN(self.netD_A(self.fakeB), self.true_label)
         self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), self.false_label)
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
@@ -354,6 +374,7 @@ class CycleGAN:
         self.loss_G.backward()
 
     def compute_loss_D_basic(self, netD, real, fake):
+        """Compute losses of corresponding discriminator"""
         pred_real = netD(real)
         pred_fake = netD(fake.detach())
         loss_D_real = self.criterionGAN(pred_real, self.true_label)
@@ -362,20 +383,28 @@ class CycleGAN:
         return loss_D
 
     def compute_loss_D_A(self):
+        """Compute the loss of D_A
+        Discriminator needs to get an image from the image pool
+        """
         fake_B = self.fakeB_pool.query(self.fakeB)
         self.loss_D_A = self.compute_loss_D_basic(self.netD_A, self.realB, fake_B)
 
     def compute_loss_D_B(self):
+        """Compute the loss of D_B
+        Discriminator needs to get an image from the image pool
+        """
         fake_A = self.fakeA_pool.query(self.fakeA)
         self.loss_D_B = self.compute_loss_D_basic(self.netD_B, self.realA, fake_A)
 
     def backward_D(self):
+        """Compute the final loss of discriminators and gradients"""
         self.compute_loss_D_A()
         self.compute_loss_D_B()
         self.loss_D = self.loss_D_A + self.loss_D_B
         self.loss_D.backward()
 
     def forward(self, realA, realB):
+        """Forward images to the net"""
         self.realA = realA.to(self.device)
         self.realB = realB.to(self.device)
                                               #   X   <------->   Y
@@ -389,6 +418,7 @@ class CycleGAN:
         self.idtB = self.netG_B(self.realA)  #  ⌎---- realA   idtA <--G_A
 
     def backward(self):
+        """Optimize the parameters"""
         self.optimizerG.zero_grad()
         self.backward_G()
         self.optimizerG.step()
@@ -397,7 +427,8 @@ class CycleGAN:
         self.backward_D()
         self.optimizerD.step()
 
-    def get_current_images(self):
+    def get_current_images(self) -> dict:
+        """Returns lately generated images and input images with names"""
         return {
             'realA': self.realA, 'realB': self.realB,
             'fakeA': self.fakeA, 'fakeB': self.fakeB,
@@ -405,7 +436,8 @@ class CycleGAN:
             'idtA':  self.idtA,  'idtB':  self.idtB
         }
 
-    def get_current_losses(self):
+    def get_current_losses(self) -> dict:
+        """Returns losses of this step with names"""
         loss_names = ['G', 'G_A', 'G_B',
                       'Cycle_A', 'Cycle_B',
                       'Idt_A', 'Idt_B',
@@ -417,6 +449,7 @@ class CycleGAN:
         return {loss_name: loss for loss_name, loss in zip(loss_names, losses)}
 
     def update_learning_rate(self):
+        """Update the learning rate at the end of each epoch"""
         for scheduler in self.schedulers:
             scheduler.step()
         lr = self.optimizerG.param_groups[0]['lr']
@@ -424,8 +457,16 @@ class CycleGAN:
 
 
 class Visualizer:
+    """Visualizes the current states.
+
+    Methods:
+        print_images: shows recently generated images
+        print_options: prints options being used in this training.
+        print_losses: prints losses of this step
+    """
 
     def __init__(self, model):
+        """Embed the cycleGAN model and launch matplotlib screen"""
         self.model = model
         self.fig, self.ax = plt.subplots(2, 4, figsize=(3, 11))
         for i in range(2):
@@ -433,46 +474,60 @@ class Visualizer:
                 self.ax[i][j].set_axis_off()
         plt.pause(1.)
 
-    def update(self):
-        images = self.model.get_current_images().items()
-        for i in range(2):
-            for j in range(4):
-                name, image = images[2*i+j]
-                ax = self.ax[i][j]
-                ax.imshow(image.detach())
-                ax.set_title(name)
-        plt.pause(.1)
+    def print_images(self, epoch, iters):
+        """Shows recently generated images
 
+        :param epoch: current epoch
+        :param iters: current iteration count of this epoch
+        """
+        total_iters = epoch * opt.batch_size + iters
+        if total_iters % opt.display_freq:
+            images = self.model.get_current_images().items()
+            for i in range(2):
+                for j in range(4):
+                    name, image = images[2*i+j]
+                    ax = self.ax[i][j]
+                    ax.imshow(image.detach())
+                    ax.set_title(name)
+            plt.pause(.1)
 
-def print_losses(epoch, iters, t_comp, losses, data_length):
-    """Print the current losses and the computational time
+    @staticmethod
+    def print_options():
+        """Prints options being used in this training."""
+        print(f'\n\n{" OPTIONS ":=^31}')
+        for k, v in Options.__dict__.items():
+            if not k.startswith('__'):  # not for built-in members
+                print(f'{k:>15}:{v}')
+        print(f'{" END ":=^31}\n\n')
 
-    :param epoch: current epoch
-    :param iters: current training iteration during this epoch
-    :param t_comp: computational time per data point
-    :param losses: training losses normalized by batch size
-    :param data_length: total data size defined by its dataloader
-    """
-    total_iters = epoch * opt.batch_size + iters
-    if total_iters % opt.display_freq:
-        message = f'(epoch: {epoch:3d}, iters: {iters:4d}/{data_length}, time: {t_comp:.3f}s)  '
-        for name, loss in losses.items():
-            loss_format = '6.3f' if name is 'G' else '.3f'
-            message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
-        print(message)
+    def print_losses(self, epoch, iters, t_comp, data_length):
+        """Prints the current losses and the computational time
+
+        :param epoch: current epoch
+        :param iters: current training iteration during this epoch
+        :param t_comp: computational time per data point
+        :param data_length: total data size defined by its dataloader
+        """
+        total_iters = epoch * opt.batch_size + iters
+        if total_iters % opt.display_freq:
+            message = f'(epoch: {epoch:3d}, iters: {iters:4d}/{data_length}, time: {t_comp:.3f}s)  '
+            for name, loss in self.model.get_current_losses().items():
+                loss_format = '6.3f' if name is 'G' else '.3f'
+                message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
+            print(message)
 
 
 ########################## Monet2Photo Full Implementation ##########################
 if __name__ == '__main__':
 
-    dataset = Monet2PhotoDataset()
+    dataset = Monet2PhotoDataset(opt.load_size, opt.crop_size)
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
     model = CycleGAN()
     visualizer = Visualizer(model)
 
-    print_options()
+    visualizer.print_options()
     print('Let\'s begin the training!\n')
     for epoch in range(opt.n_epochs):
         for batch_idx, (dataA, dataB) in enumerate(dataloader):
@@ -480,9 +535,8 @@ if __name__ == '__main__':
             model.forward(dataA, dataB)
             model.backward()
             t1 = time.time()
-            print_losses(epoch, batch_idx, (t1 - t0) / len(dataA),
-                         model.get_current_losses(), len(dataloader))
-            visualizer.update()
+            visualizer.print_losses(epoch, batch_idx, (t1 - t0) / len(dataA), len(dataloader))
+            visualizer.print_images(epoch, batch_idx)
         model.update_learning_rate()
 
     # todo: add the test code both in and out of the loop
