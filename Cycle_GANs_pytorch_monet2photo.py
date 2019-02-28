@@ -1,6 +1,26 @@
+"""
+    One-File CycleGANs
+
+    This code was created by Hyeo-Geon Lee (Owen Lee)
+    to offer beginners of GANs to easier way to absorb the code.
+
+    Please don't hesitate to issue the code
+    since every single issue I've got so far was so useful.
+
+    Author:
+        name: Haawron - Hyeo-Geon Lee (Owen Lee)
+        storage: https://github.com/Haawron
+
+    Referenced:
+        paper: https://arxiv.org/abs/1703.10593
+        code: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
+
+"""
+
 import os
 import time
 import random
+
 import torch
 import torch.nn as nn
 import torch.utils.data
@@ -421,8 +441,9 @@ def print_losses(epoch, iters, t_comp, losses, data_length):
         print(message)
 
 
+########################## Monet2Photo Full Implementation ##########################
 if __name__ == '__main__':
-    ########################## Monet2Photo Full Implementation ##########################
+
     dataset = Monet2PhotoDataset()
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
