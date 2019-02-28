@@ -56,7 +56,7 @@ opt = Options()
 def resblock(dim):
     """Residual block unit of the ResNet
 
-    :param dim: the number of input channels of this layer
+    :param dim: the number of input channels of this block
     """
 
     return nn.Sequential(
@@ -200,7 +200,7 @@ class ImagePool:
 
 
 class Generator(nn.Module):
-    """The generator which uses 9 residual blocks"""
+    """Generator which uses 9 residual blocks"""
 
     def __init__(self, ngf=64):
         super().__init__()
