@@ -20,6 +20,7 @@
 import os
 import time
 import random
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -54,12 +55,12 @@ opt = Options()
 def print_options():
     print(f'\n\n{" OPTIONS ":=^31}')
     for k, v in Options.__dict__.items():
-        if not k.startswith('__'):
+        if not k.startswith('__'):  # not for built-in members
             print(f'{k:>15}:{v}')
     print(f'{" END ":=^31}\n\n')
 
 
-def resblock(dim):  # res이기 때문에 앞뒤 채널이 똑같아야 함
+def resblock(dim):
 
     return nn.Sequential(
 
@@ -126,17 +127,14 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
         # indices should be different to avoid fixed pairs.
         A_index = random.randrange(self.A_size)
         B_index = random.randrange(self.B_size)
-
         A_path = os.path.join(self.A_dir, self.A_paths[A_index])
         B_path = os.path.join(self.B_dir, self.B_paths[B_index])
-
         A_image = Image.open(A_path).convert('RGB')
         B_image = Image.open(B_path).convert('RGB')
-
         A = self.transforms(A_image)
         B = self.transforms(B_image)
 
-        return A, B  # the data we are going to get while the iteration
+        return A, B  # the data we are gonna get while the iteration in the main loop
 
     def __len__(self):
         return max(self.A_size, self.B_size)
@@ -207,13 +205,13 @@ class Generator(nn.Module):
 
         self.model = nn.Sequential(
 
-            # 크기 안 줄어듦
+            # keeps the feature size
             nn.ReflectionPad2d(3),
             nn.Conv2d(      3,     ngf, kernel_size=7, stride=1, padding=0, bias=True),
             nn.InstanceNorm2d(ngf),
             nn.ReLU(inplace=True),
 
-            # Downsampling 2회
+            # Downsample twice
             nn.Conv2d(    ngf, 2 * ngf, kernel_size=3, stride=2, padding=1, bias=True),
             nn.InstanceNorm2d( 2 * ngf),
             nn.ReLU(inplace=True),
@@ -224,7 +222,7 @@ class Generator(nn.Module):
             # 9 Res-blocks
             *[resblock(4 * ngf) for _ in range(9)],
 
-            # Upsampling 2회
+            # Upsample twice
             nn.ConvTranspose2d(4 * ngf, 2 * ngf, kernel_size=3, stride=2, padding=1, output_padding=1, bias=True),
             nn.InstanceNorm2d(          2 * ngf),
             nn.ReLU(inplace=True),
@@ -232,7 +230,7 @@ class Generator(nn.Module):
             nn.InstanceNorm2d(ngf),
             nn.ReLU(inplace=True),
 
-            # 크기 안 변함
+            # keeps the feature size
             nn.ReflectionPad2d(3),
             nn.Conv2d(ngf, 3, kernel_size=7, padding=0),
             nn.Tanh()
@@ -283,15 +281,15 @@ class CycleGAN:
         self.n_epochs = n_epochs
         self.ngf = ngf
         self.ndf = ndf
-        self.lambdaA = lambdaA  # Cycle Loss의 계수
+        self.lambdaA = lambdaA  # coefficients of cycle losses
         self.lambdaB = lambdaB
-        self.lambdaIdt = lambdaIdt
+        self.lambdaIdt = lambdaIdt  # coefficient of Identity losses
         self.save_dir = save_dir
 
         self.true_label = torch.tensor(1.)
         self.false_label = torch.tensor(0.)
 
-        # need to add data parallel code
+        # todo: need to add data parallel code
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.fakeA_pool = ImagePool(opt.image_pool_size)
@@ -309,8 +307,8 @@ class CycleGAN:
         self.netD_A = define_D(self.ndf)
         self.netD_B = define_D(self.ndf)
 
-        self.G_params = self.get_G_params()
-        self.D_params = self.get_D_params()
+        self.G_params = list(self.netG_A.parameters()) + list(self.netG_B.parameters())
+        self.D_params = list(self.netD_A.parameters()) + list(self.netD_B.parameters())
 
     def define_criterions(self):
         self.criterionGAN = nn.MSELoss()  # LSGAN losses
@@ -326,12 +324,6 @@ class CycleGAN:
             return min(1., (epoch - opt.n_epochs) / (opt.begin_decay - opt.n_epochs + 1))
         self.schedulers = [optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
                            for optimizer in [self.optimizerG, self.optimizerD]]
-
-    def get_G_params(self) -> list:
-        return list(self.netG_A.parameters()) + list(self.netG_B.parameters())
-
-    def get_D_params(self) -> list:
-        return list(self.netD_A.parameters()) + list(self.netD_B.parameters())
 
     def move_to(self):
         self.netG_A       = self.netG_A.to(self.device)
@@ -405,6 +397,14 @@ class CycleGAN:
         self.backward_D()
         self.optimizerD.step()
 
+    def get_current_images(self):
+        return {
+            'realA': self.realA, 'realB': self.realB,
+            'fakeA': self.fakeA, 'fakeB': self.fakeB,
+            'recoA': self.recoA, 'recoB': self.recoB,
+            'idtA':  self.idtA,  'idtB':  self.idtB
+        }
+
     def get_current_losses(self):
         loss_names = ['G', 'G_A', 'G_B',
                       'Cycle_A', 'Cycle_B',
@@ -421,6 +421,27 @@ class CycleGAN:
             scheduler.step()
         lr = self.optimizerG.param_groups[0]['lr']
         print(f'learning rate = {lr:.7f}')
+
+
+class Visualizer:
+
+    def __init__(self, model):
+        self.model = model
+        self.fig, self.ax = plt.subplots(2, 4, figsize=(3, 11))
+        for i in range(2):
+            for j in range(4):
+                self.ax[i][j].set_axis_off()
+        plt.pause(1.)
+
+    def update(self):
+        images = self.model.get_current_images().items()
+        for i in range(2):
+            for j in range(4):
+                name, image = images[2*i+j]
+                ax = self.ax[i][j]
+                ax.imshow(image.detach())
+                ax.set_title(name)
+        plt.pause(.1)
 
 
 def print_losses(epoch, iters, t_comp, losses, data_length):
@@ -449,6 +470,7 @@ if __name__ == '__main__':
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
     model = CycleGAN()
+    visualizer = Visualizer(model)
 
     print_options()
     print('Let\'s begin the training!\n')
@@ -460,6 +482,7 @@ if __name__ == '__main__':
             t1 = time.time()
             print_losses(epoch, batch_idx, (t1 - t0) / len(dataA),
                          model.get_current_losses(), len(dataloader))
+            visualizer.update()
         model.update_learning_rate()
 
     # todo: add the test code both in and out of the loop
