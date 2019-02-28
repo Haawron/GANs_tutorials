@@ -47,7 +47,7 @@ class Options:
     load_size = 286  # scale images to this size
     crop_size = 256  # then crop to this size
     begin_decay = 100  # #epoch beginning to decay
-    display_freq = 400  # iteration frequency of showing training results on screen
+    display_freq = 100  # iteration frequency of showing training results on screen
 
 
 opt = Options()
@@ -73,7 +73,7 @@ def resblock(dim):
     )
 
 
-def init_net(net):
+def init_net(net) -> nn.modules:
     """Apply the weight initialization method through the all layers of the net
 
     :return: initialized net
@@ -468,27 +468,31 @@ class Visualizer:
     def __init__(self, model):
         """Embed the cycleGAN model and launch matplotlib screen"""
         self.model = model
-        self.fig, self.ax = plt.subplots(2, 4, figsize=(3, 11))
+        self.iteration_time = 0
+        self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         for i in range(2):
             for j in range(4):
                 self.ax[i][j].set_axis_off()
         plt.pause(1.)
 
-    def print_images(self, epoch, iters):
-        """Shows recently generated images
+    def print_images(self, epoch, iters, batches_per_epoch):
+        """Shows and saves recently generated images
 
         :param epoch: current epoch
         :param iters: current iteration count of this epoch
+        :param batches_per_epoch: number of batches per epoch
         """
-        total_iters = epoch * opt.batch_size + iters
-        if total_iters % opt.display_freq:
-            images = self.model.get_current_images().items()
+        total_iters = epoch * batches_per_epoch + iters
+        if total_iters % opt.display_freq == 0:
+            images = list(self.model.get_current_images().items())
+            self.fig.suptitle(f'epoch {epoch} iter {iters}')
             for i in range(2):
                 for j in range(4):
-                    name, image = images[2*i+j]
+                    name, (image,) = images[i+2*j]
                     ax = self.ax[i][j]
-                    ax.imshow(image.detach())
+                    ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
+            plt.savefig(f'results/{epoch:3d}_{iters:4d}.png', bbox_inches='tight')
             plt.pause(.1)
 
     @staticmethod
@@ -500,21 +504,28 @@ class Visualizer:
                 print(f'{k:>15}:{v}')
         print(f'{" END ":=^31}\n\n')
 
-    def print_losses(self, epoch, iters, t_comp, data_length):
+    def print_losses(self, epoch, iters, t_comp, t_global, batches_per_epoch):
         """Prints the current losses and the computational time
 
         :param epoch: current epoch
         :param iters: current training iteration during this epoch
-        :param t_comp: computational time per data point
-        :param data_length: total data size defined by its dataloader
+        :param t_comp: computational time per batch
+        :param t_global: total time spent during this training
+        :param batches_per_epoch: number of batches per epoch
         """
-        total_iters = epoch * opt.batch_size + iters
-        if total_iters % opt.display_freq:
-            message = f'(epoch: {epoch:3d}, iters: {iters:4d}/{data_length}, time: {t_comp:.3f}s)  '
+        self.iteration_time += t_comp
+        total_iters = epoch * batches_per_epoch + iters
+        if total_iters % opt.display_freq == 0 and total_iters != 0:
+            time_per_data = self.iteration_time / opt.batch_size / opt.display_freq
+            message = (
+                f'(epoch: {epoch:3d}, iters: {iters:4d}/{batches_per_epoch}, '
+                f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
+                f'total time spent: {t_global:.3f}s)  ')
             for name, loss in self.model.get_current_losses().items():
                 loss_format = '6.3f' if name is 'G' else '.3f'
                 message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
             print(message)
+            self.iteration_time = 0
 
 
 ########################## Monet2Photo Full Implementation ##########################
@@ -529,14 +540,17 @@ if __name__ == '__main__':
 
     visualizer.print_options()
     print('Let\'s begin the training!\n')
+    t0_global = time.time()
     for epoch in range(opt.n_epochs):
+        t0_epoch = time.time()
         for batch_idx, (dataA, dataB) in enumerate(dataloader):
             t0 = time.time()
             model.forward(dataA, dataB)
             model.backward()
             t1 = time.time()
-            visualizer.print_losses(epoch, batch_idx, (t1 - t0) / len(dataA), len(dataloader))
-            visualizer.print_images(epoch, batch_idx)
+            visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
+            visualizer.print_images(epoch, batch_idx, len(dataloader))
+        print(f'End of Epoch {epoch:3d} Time spent: {time.time() - t0_epoch:.3f}s')
         model.update_learning_rate()
-
-    # todo: add the test code both in and out of the loop
+    print(f'End of the Training, Total Time Spent: {time.time() - t0_global:10.3f}s')
+    plt.show()
