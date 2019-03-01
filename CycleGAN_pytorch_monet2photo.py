@@ -554,7 +554,7 @@ class Visualizer:
         d, h = divmod(h, 24)
         return (
             f'{d}d' if d != 0 else ''
-            f'{h:2d}h {m:2d}m {s:2d}s'
+            f'{h:2d}h {m:02d}m {s:02d}s'
         )
 
 
