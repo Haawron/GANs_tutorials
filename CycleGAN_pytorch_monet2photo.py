@@ -210,7 +210,7 @@ class Generator(nn.Module):
             # keeps feature size
             nn.ReflectionPad2d(3),
             nn.Conv2d(      3,     ngf, kernel_size=7, stride=1, padding=0, bias=True),
-            nn.InstanceNorm2d(ngf),
+            nn.InstanceNorm2d(     ngf),
             nn.ReLU(inplace=True),
 
             # Downsample twice
@@ -229,7 +229,7 @@ class Generator(nn.Module):
             nn.InstanceNorm2d(          2 * ngf),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(2 * ngf,     ngf, kernel_size=3, stride=2, padding=1, output_padding=1, bias=True),
-            nn.InstanceNorm2d(ngf),
+            nn.InstanceNorm2d(              ngf),
             nn.ReLU(inplace=True),
 
             # keeps feature size
@@ -255,14 +255,14 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(    ndf, 2 * ndf, kernel_size=4, stride=2, padding=1, bias=True),
-            nn.InstanceNorm2d(2 * ndf),
+            nn.InstanceNorm2d( 2 * ndf),
             nn.LeakyReLU(.2, inplace=True),
             nn.Conv2d(2 * ndf, 4 * ndf, kernel_size=4, stride=2, padding=1, bias=True),
-            nn.InstanceNorm2d(2 * ndf),
+            nn.InstanceNorm2d( 2 * ndf),
             nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(4 * ndf, 8 * ndf, kernel_size=4, stride=1, padding=1, bias=True),
-            nn.InstanceNorm2d(8 * ndf),
+            nn.InstanceNorm2d( 8 * ndf),
             nn.LeakyReLU(.2, inplace=True),
 
             nn.Conv2d(8 * ndf,       1, kernel_size=4, stride=1, padding=1, bias=True)
@@ -323,7 +323,7 @@ class CycleGAN:
         LSGAN loss for GAN losses, L1 loss for cycle, identity losses
 
         Identity loss is used only for monet2photo task to keep the color context
-        If you missed this in the paper, refer to section [5.2 - photo generation from paintings]
+        If you had missed this in the paper, refer to section [5.2 - photo generation from paintings]
         """
         self.criterionGAN = nn.MSELoss()  # LSGAN losses
         self.criterionCycle = nn.L1Loss()
@@ -520,12 +520,22 @@ class Visualizer:
             message = (
                 f'(epoch: {epoch:3d}, iters: {iters:4d}/{batches_per_epoch}, '
                 f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
-                f'total time spent: {t_global:.3f}s)  ')
+                f'total time spent: {self.sec2time(t_global)})  ')
             for name, loss in self.model.get_current_losses().items():
                 loss_format = '6.3f' if name is 'G' else '.3f'
                 message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
             print(message)
             self.iteration_time = 0
+
+    @staticmethod
+    def sec2time(sec):
+        m, s = divmod(sec, 60)
+        h, m = divmod(m, 60)
+        d, h = divmod(h, 24)
+        return (
+            f'{d}d' if d != 0 else ''
+            f'{h:2d}h {m:2d}m {s:2d}s'
+        )
 
 
 ########################## Monet2Photo Full Implementation ##########################
@@ -550,7 +560,7 @@ if __name__ == '__main__':
             t1 = time.time()
             visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
             visualizer.print_images(epoch, batch_idx, len(dataloader))
-        print(f'End of Epoch {epoch:3d} Time spent: {time.time() - t0_epoch:.3f}s')
+        print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
-    print(f'End of the Training, Total Time Spent: {time.time() - t0_global:10.3f}s')
+    print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
