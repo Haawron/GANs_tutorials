@@ -465,9 +465,14 @@ class Visualizer:
         print_losses: prints losses of this step
     """
 
-    def __init__(self, model):
-        """Embed the cycleGAN model and launch matplotlib screen"""
+    def __init__(self, model, test_images: tuple):
+        """Embed the cycleGAN model and launch matplotlib screen
+
+        :param model: the cycleGAN model
+        :param test_images: a single image pair for the test
+        """
         self.model = model
+        self.test_images = test_images
         self.iteration_time = 0
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         for i in range(2):
@@ -475,15 +480,29 @@ class Visualizer:
                 self.ax[i][j].set_axis_off()
         plt.pause(1.)
 
+        if 'results' not in os.listdir():
+            os.mkdir('results')
+
     def print_images(self, epoch, iters, batches_per_epoch):
-        """Shows and saves recently generated images
+        self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
+
+    def save_images(self, epoch, iters, batches_per_epoch):
+        self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='save')
+
+    def __show_images_with_plt(self, epoch, iters, batches_per_epoch, mode):
+        """Shows or saves recently generated images
 
         :param epoch: current epoch
         :param iters: current iteration count of this epoch
         :param batches_per_epoch: number of batches per epoch
+        :param mode: 'save' | 'print'
         """
+        assert mode in ['save', 'print']
+
         total_iters = epoch * batches_per_epoch + iters
         if total_iters % opt.display_freq == 0:
+            if mode is 'save':
+                self.model.forward(*self.test_images)
             images = list(self.model.get_current_images().items())
             self.fig.suptitle(f'epoch {epoch} iter {iters}')
             for i in range(2):
@@ -492,8 +511,9 @@ class Visualizer:
                     ax = self.ax[i][j]
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
-            plt.savefig(f'results/{epoch:3d}_{iters:4d}.png', bbox_inches='tight')
-            plt.pause(.1)
+            plt.savefig(f'results/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
+            if mode is 'print':
+                plt.pause(.1)
 
     @staticmethod
     def print_options():
@@ -529,7 +549,7 @@ class Visualizer:
 
     @staticmethod
     def sec2time(sec):
-        m, s = divmod(sec, 60)
+        m, s = divmod(int(sec), 60)
         h, m = divmod(m, 60)
         d, h = divmod(h, 24)
         return (
@@ -546,7 +566,9 @@ if __name__ == '__main__':
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
     model = CycleGAN()
-    visualizer = Visualizer(model)
+
+    test_images = next(iter(dataloader))
+    visualizer = Visualizer(model, test_images)
 
     visualizer.print_options()
     print('Let\'s begin the training!\n')
@@ -560,7 +582,9 @@ if __name__ == '__main__':
             t1 = time.time()
             visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
             visualizer.print_images(epoch, batch_idx, len(dataloader))
+            visualizer.save_images(epoch, batch_idx, len(dataloader))
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
+    # todo: 하...체크 포인트도 넣어야 함
