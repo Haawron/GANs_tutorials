@@ -509,11 +509,13 @@ class Visualizer:
                 for j in range(4):
                     name, (image,) = images[i+2*j]
                     ax = self.ax[i][j]
+                    ax.clear()
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
-            plt.savefig(f'results/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
-            if mode is 'print':
-                plt.pause(.1)
+            if mode is 'save':
+                plt.savefig(f'results/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
+            elif mode is 'print':
+                plt.pause(.001)
 
     @staticmethod
     def print_options():
