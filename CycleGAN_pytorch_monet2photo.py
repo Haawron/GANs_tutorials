@@ -279,10 +279,9 @@ class CycleGAN:
      so that generators can train how to do style-transfer without paired dataset.
     """
 
-    def __init__(self, batch_size=1, lr=2e-4, betas=(.5, .999), n_epochs=200,
+    def __init__(self, lr=2e-4, betas=(.5, .999), n_epochs=200,
                  ngf=64, ndf=64, save_dir='./checkpoints',
                  lambdaA=10., lambdaB=10., lambdaIdt=.5):
-        self.batch_size = batch_size
         self.learning_rate = lr
         self.betas = betas
         self.n_epochs = n_epochs
@@ -331,15 +330,15 @@ class CycleGAN:
 
     def define_optimizers(self):
         """Define optimizers"""
-        self.optimizerG = optim.Adam(self.G_params, lr=opt.learning_rate, betas=opt.betas)
-        self.optimizerD = optim.Adam(self.D_params, lr=opt.learning_rate, betas=opt.betas)
+        self.optimizerG = optim.Adam(self.G_params, lr=self.learning_rate, betas=self.betas)
+        self.optimizerD = optim.Adam(self.D_params, lr=self.learning_rate, betas=self.betas)
 
     def define_schedulers(self):
         """Define schedulers
         for <100 epoch, maintain initial learning rate
         and for >=100 epoch, linearly decay to 0"""
         def lambda_rule(epoch):
-            return min(1., (epoch - opt.n_epochs) / (opt.begin_decay - opt.n_epochs + 1))
+            return min(1., (epoch - self.n_epochs) / (opt.begin_decay - self.n_epochs + 1))
         self.schedulers = [optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
                            for optimizer in [self.optimizerG, self.optimizerD]]
 
@@ -403,7 +402,7 @@ class CycleGAN:
         self.loss_D = self.loss_D_A + self.loss_D_B
         self.loss_D.backward()
 
-    def forward(self, realA, realB):
+    def forward(self, realA: torch.Tensor, realB: torch.Tensor):
         """Forward images to the net"""
         self.realA = realA.to(self.device)
         self.realB = realB.to(self.device)
@@ -538,9 +537,9 @@ class Visualizer:
         if total_iters % opt.display_freq == 0 and total_iters != 0:
             time_per_data = self.iteration_time / opt.batch_size / opt.display_freq
             message = (
-                f'(epoch: {epoch:3d}, iters: {iters:4d}/{batches_per_epoch}, '
+                f'epoch: {epoch:3d}, iters: {iters:4d}/{batches_per_epoch}, '
                 f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
-                f'total time spent: {self.sec2time(t_global)})  ')
+                f'total time spent: {self.sec2time(t_global)}  |  ')
             for name, loss in self.model.get_current_losses().items():
                 loss_format = '6.3f' if name is 'G' else '.3f'
                 message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
@@ -565,7 +564,11 @@ if __name__ == '__main__':
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
-    model = CycleGAN()
+    model = CycleGAN(
+        lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
+        ngf=opt.ngf, ndf=opt.ndf,
+        lambdaA=opt.lambdaA, lambdaB=opt.lambdaB, lambdaIdt=opt.lambdaIdt
+    )
 
     test_images = next(iter(dataloader))
     visualizer = Visualizer(model, test_images)
@@ -587,4 +590,5 @@ if __name__ == '__main__':
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
-    # todo: 하...체크 포인트도 넣어야 함
+    # todo: 데이터 다운 받는거
+    # todo: 하...체크 포인트도 넣을까?
