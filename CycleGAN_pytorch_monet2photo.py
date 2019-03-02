@@ -33,7 +33,7 @@ from PIL import Image
 
 class Options:
     """This class makes the code similar to the original one (with argparse)"""
-    batch_size = 1
+    batch_size = 2  # default 1
     image_pool_size = 50  # the size of image buffer that stores previously generated images
     learning_rate = 2e-4
     betas = (.5, .999)
@@ -47,7 +47,7 @@ class Options:
     load_size = 286  # scale images to this size
     crop_size = 256  # then crop to this size
     begin_decay = 100  # #epoch beginning to decay
-    display_freq = 100  # iteration frequency of showing training results on screen
+    display_freq = 500  # iteration frequency of showing training results on screen
 
 
 opt = Options()
@@ -475,9 +475,6 @@ class Visualizer:
         self.test_images = test_images
         self.iteration_time = 0
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
-        for i in range(2):
-            for j in range(4):
-                self.ax[i][j].set_axis_off()
         plt.pause(1.)
 
         if 'results' not in os.listdir():
@@ -507,9 +504,10 @@ class Visualizer:
             self.fig.suptitle(f'epoch {epoch} iter {iters}')
             for i in range(2):
                 for j in range(4):
-                    name, (image,) = images[i+2*j]
+                    name, (image, *_) = images[i+2*j]
                     ax = self.ax[i][j]
                     ax.clear()
+                    ax.set_axis_off()
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
             if mode is 'save':
