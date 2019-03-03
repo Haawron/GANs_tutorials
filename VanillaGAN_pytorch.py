@@ -8,8 +8,8 @@ from torchvision import datasets, transforms
 
 
 class Options:
-    batch_size = 64
-    learning_rate = 2e-4
+    batch_size = 256
+    learning_rate = 2e-3
     betas = (.5, .999)
     n_epochs = 100
     result_dir = 'resultsGAN'
@@ -56,12 +56,25 @@ class Discriminator(nn.Module):
         return self.model(*input)
 
 
+def init_net(net) -> nn.modules:
+    """Apply the weight initialization method through the all layers of the net
+
+    :return: initialized net
+    """
+    def init_func(m):
+        if type(m) is nn.Linear:
+            nn.init.normal_(m.weight.data, mean=0., std=.01)  # init.normal has been deprecated
+            nn.init.normal_(m.bias.data, mean=0., std=.01)
+
+    return net.apply(init_func)  # apply recursively to the net
+
+
 def define_G():
-    return Generator()
+    return init_net(Generator())
 
 
 def define_D():
-    return Discriminator()
+    return init_net(Discriminator())
 
 
 class GAN:
