@@ -53,6 +53,9 @@ class Discriminator(nn.Module):
 def init_net(net) -> nn.modules:
     """Apply the weight initialization method through the all layers of the net
 
+    PyTorch 기본 initializer가 Xavier나 He인 걸로 알고 있는데
+    만능은 아닌 것 같다.
+
     :return: initialized net
     """
     def init_func(m):
@@ -177,8 +180,7 @@ class Visualizer:
     def __show_images_with_plt(self, epoch, mode):
         assert mode in ['save', 'print']
 
-        if mode is 'save':  # I love "is" more than "==" since more readable
-            self.model.eval(self.test_noise)
+        self.model.eval(self.test_noise)
         images = self.model.get_current_images()
         self.fig.suptitle(f'epoch {epoch}')
         for i in range(5):
@@ -188,7 +190,7 @@ class Visualizer:
                 ax.clear()
                 ax.set_axis_off()
                 ax.imshow(image.detach().cpu().numpy() / 2 + .5)
-        if mode is 'save':
+        if mode is 'save':  # I love "is" more than "==" since more readable
             plt.savefig(f'{opt.result_dir}/{epoch:02d}.png', bbox_inches='tight')
         elif mode is 'print':
             plt.pause(.001)
