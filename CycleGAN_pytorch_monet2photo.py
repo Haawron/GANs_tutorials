@@ -592,3 +592,4 @@ if __name__ == '__main__':
     plt.show()
     # todo: 데이터 다운 받는거
     # todo: 하...체크 포인트도 넣을까?
+    # todo: 저거 배치놈이면 train eval 분리해줘야 되는뎅 ㅠ
