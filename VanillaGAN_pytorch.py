@@ -191,8 +191,7 @@ class Visualizer:
         plt.pause(.001)  # you can think it as updating
 
         # make result directory if you don't have it
-        if opt.result_dir not in os.listdir():
-            os.mkdir(opt.result_dir)
+        os.mkdir(opt.result_dir)
 
     @staticmethod
     def print_options():
