@@ -28,18 +28,22 @@ class Generator(nn.Module):
         super().__init__()
 
         self.model = nn.Sequential(
-            nn.ConvTranspose2d(    128, 8 * ngf, 4, 1, 0, bias=False),
+            nn.ConvTranspose2d(    100, 8 * ngf, 4, 1, 0, bias=False),
             nn.BatchNorm2d(             8 * ngf),
             nn.ReLU(inplace=True),
+
             nn.ConvTranspose2d(8 * ngf, 4 * ngf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(             4 * ngf),
             nn.ReLU(inplace=True),
+
             nn.ConvTranspose2d(4 * ngf, 2 * ngf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(             2 * ngf),
             nn.ReLU(inplace=True),
+
             nn.ConvTranspose2d(2 * ngf,     ngf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(                 ngf),
             nn.ReLU(inplace=True),
+
             nn.ConvTranspose2d(    ngf,       1, 4, 2, 1, bias=True),
             nn.Tanh()
         )
@@ -56,15 +60,19 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(
             nn.Conv2d(      1,     ndf, 4, 2, 1, bias=True),
             nn.LeakyReLU(.2, inplace=True),
+
             nn.Conv2d(    ndf, 2 * ndf, 4, 2, 2, bias=False),
             nn.BatchNorm2d(    2 * ndf),
             nn.LeakyReLU(.2, inplace=True),
+
             nn.Conv2d(2 * ndf, 4 * ndf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(    4 * ndf),
             nn.LeakyReLU(.2, inplace=True),
+
             nn.Conv2d(4 * ndf, 8 * ndf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(    8 * ndf),
             nn.LeakyReLU(.2, inplace=True),
+
             nn.Conv2d(8 * ndf,       1, 4, 1, 0, bias=False),
             nn.Sigmoid()
         )
@@ -84,12 +92,12 @@ def init_net(net) -> nn.Module:
     return net.apply(init_func)  # apply recursively to the net
 
 
-def define_G():
-    return init_net(Generator())
+def define_G(ngf):
+    return Generator(ngf)
 
 
-def define_D():
-    return init_net(Discriminator())
+def define_D(ndf):
+    return Discriminator(ndf)
 
 
 class DCGAN:
@@ -111,8 +119,11 @@ class DCGAN:
         self.define_optimizers()
 
     def define_nets(self):
-        self.netG = define_G()
-        self.netD = define_D()
+        self.netG = define_G(self.ngf)
+        self.netD = define_D(self.ndf)
+
+        self.netG.train()
+        self.netD.train()
 
     def define_criterions(self):
         self.criterionGAN = torch.nn.BCELoss()
@@ -133,7 +144,7 @@ class DCGAN:
 
     def backward_D(self):
         true_label = torch.ones_like(self.result_of_real).to(self.device)
-        false_label = torch.ones_like(self.result_of_fake_).to(self.device)
+        false_label = torch.zeros_like(self.result_of_fake_).to(self.device)
         loss_D_real = self.criterionGAN(self.result_of_real, true_label)
         loss_D_fake = self.criterionGAN(self.result_of_fake_, false_label)
         self.loss_D = (loss_D_real + loss_D_fake) / 2
@@ -141,7 +152,7 @@ class DCGAN:
 
     def forward(self, data: torch.Tensor):
         self.data = data.to(self.device)
-        noise = torch.randn(len(self.data), 128, 1, 1).to(self.device)
+        noise = torch.randn(len(self.data), 100, 1, 1).to(self.device)
         self.fake = self.netG(noise)
         self.result_of_fake  = self.netD(self.fake)
         self.result_of_fake_ = self.netD(self.fake.detach())  # cut gradient flow not to train both G, D at once
@@ -159,7 +170,9 @@ class DCGAN:
     # These methods are for visualizing
     def eval(self, noise: torch.Tensor):
         """For showing images on the plot"""
+        # self.netG.eval()
         self.fake = self.netG(noise.to(self.device))
+        # self.netG.train()
     def get_current_images(self):
         return self.fake
     def get_current_losses(self) -> dict:
@@ -224,16 +237,15 @@ if __name__ == '__main__':
         transform=transforms.Compose([
             transforms.Resize(opt.image_size),
             transforms.ToTensor(),
-            transforms.Normalize((.5,), (.5,))
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
     # make dataloader that makes you can iterate through the data by the batch size
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True)
 
-    model = DCGAN(lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
-                  ngf=opt.ngf, ndf=opt.ndf)
+    model = DCGAN()
 
-    test_noise = torch.randn(25, 128, 1, 1)  # 5 x 5 latent vectors for test
+    test_noise = torch.randn(25, 100, 1, 1)  # 5 x 5 latent vectors for test
     visualizer = Visualizer(model, test_noise)
 
     visualizer.print_options()
@@ -241,7 +253,12 @@ if __name__ == '__main__':
         for batch_idx, (data, _) in enumerate(dataloader):
             model.forward(data)
             model.backward()
-            visualizer.print_losses(epoch)
-            visualizer.print_images(epoch)
-            visualizer.save_images(epoch)
+            print(f'\rTrain Epoch: {epoch:2}/{opt.n_epochs} [{batch_idx * opt.batch_size:5d}/'
+                  f'{len(dataset)} '
+                  f'{"="* int(100. * batch_idx / len(dataloader) // 2) + ">":50} '
+                  f'({100. * batch_idx / len(dataloader):2.0f}%)]  '
+                  f'G_Loss: {model.loss_G:.6f} | D_Loss: {model.loss_D:.6f}', end='')
+        visualizer.print_losses(epoch)
+        visualizer.print_images(epoch)
+        visualizer.save_images(epoch)
     plt.show()
