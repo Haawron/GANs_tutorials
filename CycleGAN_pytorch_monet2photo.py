@@ -477,7 +477,7 @@ class Visualizer:
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         plt.pause(1.)
 
-        os.mkdir(opt.result_dir)
+        os.makedirs(opt.result_dir, exist_ok=True)
 
     def print_images(self, epoch, iters, batches_per_epoch):
         self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')

@@ -191,7 +191,7 @@ class Visualizer:
         plt.pause(.001)  # you can think it as updating
 
         # make result directory if you don't have it
-        os.mkdir(opt.result_dir)
+        os.makedirs(opt.result_dir, exist_ok=True)
 
     @staticmethod
     def print_options():
