@@ -282,7 +282,7 @@ class CycleGAN:
     """
 
     def __init__(self, lr=2e-4, betas=(.5, .999), n_epochs=200,
-                 ngf=64, ndf=64, save_dir='./checkpoints',
+                 ngf=64, ndf=64,
                  lambdaA=10., lambdaB=10., lambdaIdt=.5):
         self.learning_rate = lr
         self.betas = betas
@@ -292,7 +292,6 @@ class CycleGAN:
         self.lambdaA = lambdaA  # coefficients of cycle losses
         self.lambdaB = lambdaB
         self.lambdaIdt = lambdaIdt  # coefficient of Identity losses
-        self.save_dir = save_dir
 
         self.true_label = torch.tensor(1.)
         self.false_label = torch.tensor(0.)
