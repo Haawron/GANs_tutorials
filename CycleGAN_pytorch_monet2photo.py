@@ -40,7 +40,7 @@ class Options:
     n_epochs = 200
     ngf = 64  # #filters in the last conv layer
     ndf = 64  # #filters in the last conv layer
-    # save_dir = './checkpoints'
+
     lambdaA = 10.  # coefficient of cycle loss
     lambdaB = 10.  # coefficient of cycle loss
     lambdaIdt = .5  # coefficient of identity loss
@@ -48,6 +48,8 @@ class Options:
     crop_size = 256  # then crop to this size
     begin_decay = 100  # #epoch beginning to decay
     display_freq = 500  # iteration frequency of showing training results on screen
+
+    result_dir = 'resultsCycleGAN'
 
 
 opt = Options()
@@ -476,8 +478,7 @@ class Visualizer:
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         plt.pause(1.)
 
-        if 'results' not in os.listdir():
-            os.mkdir('results')
+        os.mkdir(opt.result_dir)
 
     def print_images(self, epoch, iters, batches_per_epoch):
         self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
@@ -510,7 +511,7 @@ class Visualizer:
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
             if mode is 'save':
-                plt.savefig(f'results/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
+                plt.savefig(f'{opt.result_dir}/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
             elif mode is 'print':
                 plt.pause(.001)
 
