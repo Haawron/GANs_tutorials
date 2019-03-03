@@ -12,6 +12,7 @@ class Options:
     learning_rate = 2e-4
     betas = (.5, .999)
     n_epochs = 100
+    result_dir = 'resultsGAN'
 
 
 opt = Options()
@@ -25,8 +26,12 @@ class Generator(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(128, 256),
             nn.ReLU(inplace=True),
-            nn.Linear(256, 784),
-            nn.Sigmoid()
+            nn.Linear(256, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 784),
+            nn.Tanh()
         )
 
     def forward(self, *input):
@@ -39,7 +44,9 @@ class Discriminator(nn.Module):
         super().__init__()
 
         self.model = nn.Sequential(
-            nn.Linear(784, 256),
+            nn.Linear(784, 512),
+            nn.LeakyReLU(.2, inplace=True),
+            nn.Linear(512, 256),
             nn.LeakyReLU(.2, inplace=True),
             nn.Linear(256, 1),
             nn.Sigmoid()
@@ -64,21 +71,19 @@ class GAN:
         self.betas = betas
         self.n_epochs = n_epochs
 
-        self.true_label = torch.ones(opt.batch_size, 1)
-        self.false_label = torch.zeros(opt.batch_size, 1)
-
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         self.define_nets()
         self.define_criterions()
+        self.move_to()
         self.define_optimizers()
 
     def define_nets(self):
         self.netG = define_G()
         self.netD = define_D()
 
-        self.G_params = self.netG.parameters()
-        self.D_params = self.netD.parameters()
+        self.G_params = list(self.netG.parameters())
+        self.D_params = list(self.netD.parameters())
 
     def define_criterions(self):
         self.criterionGAN = torch.nn.BCELoss()
@@ -87,8 +92,6 @@ class GAN:
         self.netG         = self.netG.to(self.device)
         self.netD         = self.netD.to(self.device)
         self.criterionGAN = self.criterionGAN.to(self.device)
-        self.true_label   = self.true_label.to(self.device)
-        self.false_label  = self.false_label.to(self.device)
 
     def define_optimizers(self):
         self.optimizerG = optim.Adam(self.G_params, lr=opt.learning_rate, betas=opt.betas)
@@ -106,15 +109,16 @@ class GAN:
 
     def forward(self, data: torch.Tensor):
         self.data = data.view(-1, 784).to(self.device)
-        noise = torch.randn(opt.batch_size, 128).to(self.device)
+        noise = torch.randn(len(self.data), 128).to(self.device)
         self.fake = self.netG(noise)
         self.result_of_fake  = self.netD(self.fake)
         self.result_of_fake_ = self.netD(self.fake.detach())
         self.result_of_real  = self.netD(self.data)
+        self.true_label = torch.ones_like(self.result_of_real).to(self.device)
+        self.false_label = torch.zeros_like(self.result_of_fake).to(self.device)
 
     def eval(self, noise: torch.Tensor):
-        noise.to(self.device)
-        self.fake = self.netG(noise)
+        self.fake = self.netG(noise.to(self.device))
 
     def backward(self):
         self.optimizerG.zero_grad()
@@ -140,8 +144,8 @@ class Visualizer:
         self.fig, self.ax = plt.subplots(5, 5, figsize=(8, 8))
         plt.pause(.001)
 
-        if 'results' not in os.listdir():
-            os.mkdir('results')
+        if opt.result_dir not in os.listdir():
+            os.mkdir(opt.result_dir)
 
     @staticmethod
     def print_options():
@@ -152,7 +156,7 @@ class Visualizer:
         print(f'{" END ":=^31}\n\n')
 
     def print_losses(self, epoch):
-        message = f'epoch {epoch}'
+        message = f'epoch {epoch:2d}'
         for name, loss in self.model.get_current_losses().items():
             message += f'  |  {name}: {loss:6.3f}'
         print(message)
@@ -176,9 +180,9 @@ class Visualizer:
                 ax = self.ax[i][j]
                 ax.clear()
                 ax.set_axis_off()
-                ax.imshow(image.detach().cpu().numpy())
+                ax.imshow(image.detach().cpu().numpy() / 2 + .5)
         if mode is 'save':
-            plt.savefig(f'results/{epoch:02d}.png', bbox_inches='tight')
+            plt.savefig(f'{opt.result_dir}/{epoch:02d}.png', bbox_inches='tight')
         elif mode is 'print':
             plt.pause(.001)
 
