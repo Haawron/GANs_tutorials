@@ -151,8 +151,8 @@ class GAN:
         self.loss_D.backward()
 
     def forward(self, data: torch.Tensor):
-        noise = torch.randn(len(self.data), 128).to(self.device)
         self.data = data.view(-1, 784).to(self.device)
+        noise = torch.randn(len(self.data), 128).to(self.device)
         self.fake = self.netG(noise)
         self.result_of_fake  = self.netD(self.fake)
         self.result_of_fake_ = self.netD(self.fake.detach())  # cut gradient flow not to train both G, D at once
