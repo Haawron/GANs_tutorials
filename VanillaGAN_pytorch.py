@@ -26,11 +26,7 @@ class Generator(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(128, 256),
             nn.ReLU(inplace=True),
-            nn.Linear(256, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 1024),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, 784),
+            nn.Linear(256, 784),
             nn.Tanh()
         )
 
@@ -44,9 +40,7 @@ class Discriminator(nn.Module):
         super().__init__()
 
         self.model = nn.Sequential(
-            nn.Linear(784, 512),
-            nn.LeakyReLU(.2, inplace=True),
-            nn.Linear(512, 256),
+            nn.Linear(784, 256),
             nn.LeakyReLU(.2, inplace=True),
             nn.Linear(256, 1),
             nn.Sigmoid()
@@ -64,7 +58,7 @@ def init_net(net) -> nn.modules:
     def init_func(m):
         if type(m) is nn.Linear:
             nn.init.normal_(m.weight.data, mean=0., std=.01)  # init.normal has been deprecated
-            nn.init.normal_(m.bias.data, mean=0., std=.01)
+            nn.init.constant_(m.bias.data, val=0.)
 
     return net.apply(init_func)  # apply recursively to the net
 
