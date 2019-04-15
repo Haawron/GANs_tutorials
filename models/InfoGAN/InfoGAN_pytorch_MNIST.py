@@ -328,7 +328,7 @@ if __name__ == '__main__':
                   f'{"="* int(100. * batch_idx / len(dataloader) // 2) + ">":50} '
                   f'({100. * batch_idx / len(dataloader):3.0f}%)]  '
                   f'Loss_G: {model.loss_G:.6f} | Loss_D: {model.loss_D:.6f} | '
-                  f'Loss_Q: {model.loss_Q:.6f}', end='')
+                  f'Loss_Q: {model.loss_Q: .6f}', end='')
         # visualizer.print_losses(epoch)
         print('')
         model.eval()
