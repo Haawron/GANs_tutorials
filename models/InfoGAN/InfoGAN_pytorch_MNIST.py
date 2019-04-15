@@ -99,17 +99,6 @@ class Discriminator(nn.Module):
         return D_logits, Q_logits
 
 
-def init_net(net) -> nn.Module:
-    def init_func(m):
-        if type(m) is nn.Conv2d:
-            nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal has been deprecated
-        elif type(m) is nn.BatchNorm2d:
-            nn.init.normal_(m.weight.data, mean=1., std=.02)
-            nn.init.constant_(m.bias.data, val=0.)
-
-    return net.apply(init_func)  # apply recursively to the net
-
-
 def define_G():
     return Generator()
 
