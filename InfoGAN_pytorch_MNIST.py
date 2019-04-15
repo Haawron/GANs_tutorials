@@ -93,7 +93,7 @@ class Discriminator(nn.Module):
         x = self.FCLayers(x)
 
         D_logits = self.D(x)
-        Q_logits = self.Q(x.detach())
+        Q_logits = self.Q(x)
         Q_logits[:, -2:] = torch.exp(Q_logits[:, -2:])  # to make sure stds to be positive
 
         return D_logits, Q_logits
@@ -150,8 +150,8 @@ class InfoGAN:
 
             def forward(self, c, c_hat, sigma):
                 l = (c - c_hat) ** 2
-                l /= (2 * sigma ** 2)
-                l += torch.log(sigma)
+                # l /= (2 * sigma ** 2)
+                # l += torch.log(sigma)
                 return l.mean()
 
         self.criterionGAN = torch.nn.BCEWithLogitsLoss()
@@ -166,19 +166,20 @@ class InfoGAN:
         self.criterionCon = self.criterionCon.to(self.device)
 
     def define_optimizers(self):
+        Q_parameters = [*self.netG.parameters(), *self.netD.D_parameters, *self.netD.Q_parameters]
         self.optimizerD = optim.Adam(self.netD.D_parameters, lr=self.learning_rate, betas=self.betas)
         self.optimizerG = optim.Adam(self.netG.parameters(), lr=self.learning_rate * 5, betas=self.betas)
-        self.optimizerQ = optim.Adam(self.netD.Q_parameters, lr=self.learning_rate * 5, betas=self.betas)
+        self.optimizerQ = optim.Adam(          Q_parameters, lr=self.learning_rate * 5, betas=self.betas)
 
     def backward_G(self):
         self.loss_G = self.criterionGAN(self.fake_logits, torch.ones_like(self.fake_logits))
-        self.loss_G.backward()
+        self.loss_G.backward(retain_graph=True)
 
     def backward_D(self):
         loss_D_real = self.criterionGAN(self.real_logits,  torch.ones_like(self.real_logits))
         loss_D_fake = self.criterionGAN(self.fake_logits_, torch.zeros_like(self.fake_logits_))
         self.loss_D = (loss_D_real + loss_D_fake) / 2
-        self.loss_D.backward()
+        self.loss_D.backward(retain_graph=True)
 
     def backward_Q(self):
         code_disc,   code_cont   = self.random_code[:, :10], self.random_code[:, 10:]  # 10, 2
@@ -190,17 +191,17 @@ class InfoGAN:
 
     def forward(self, data: torch.Tensor):
         self.data = data.to(self.device)
+
         self.code_disc = torch.eye(10)[torch.multinomial(torch.ones(10) / 10, len(self.data), replacement=True)].view(-1, 10)  # one-hot
         self.code_cont = (torch.rand(len(self.data), 2) * 2 - 1).view(-1, 2)
-        self.random_code = torch.cat((self.code_disc, self.code_cont), dim=1)
-
-        self.noise = torch.randn(len(self.data), 62)
-        self.noise = torch.cat((self.noise, self.random_code), dim=1).to(self.device)
+        self.random_code = torch.cat((self.code_disc, self.code_cont), dim=1).to(self.device)
+        self.noise = torch.randn(len(self.data), 62).to(self.device)
+        self.noise = torch.cat((self.noise, self.random_code), dim=1)
 
         self.fake = self.netG(self.noise)
-        self.real_logits,  _  = self.netD(self.data)
-        self.fake_logits,  _  = self.netD(self.fake)
-        self.fake_logits_, self.code_logits = self.netD(self.fake.detach())  # cut gradient flow not to train both G, D at the same time
+        self.fake_logits,  self.code_logits = self.netD(self.fake)
+        self.fake_logits_, _ = self.netD(self.fake.detach())  # cut gradient flow not to train both G, D at the same time
+        self.real_logits,  _ = self.netD(self.data)
 
     def backward(self):
         self.optimizerG.zero_grad()
@@ -215,8 +216,16 @@ class InfoGAN:
         self.backward_Q()
         self.optimizerQ.step()
 
+    def train(self):
+        self.netD.train()
+        self.netG.train()
+
+    def eval(self):
+        self.netD.eval()
+        self.netG.eval()
+
     # =============== For Visualizing ===============
-    def eval(self, noise: torch.Tensor):
+    def test(self, noise: torch.Tensor):
         """For showing images on the plot"""
         self.fake = self.netG(noise.to(self.device))
 
@@ -229,6 +238,9 @@ class InfoGAN:
             'D': self.loss_D,
             'Q': self.loss_Q
         }
+
+    def save(self, PATH):
+        torch.save(self.netG, PATH)
 
 
 class Visualizer:
@@ -268,9 +280,9 @@ class Visualizer:
         plt.savefig(f'{opt.result_dir}/{epoch:02d}.png', bbox_inches='tight')
 
     def __show_images_with_plt(self, epoch):
-        self.model.eval(self.test_noise)
+        self.model.test(self.test_noise)
         images = self.model.get_current_images()
-        self.fig.suptitle(f'epoch {epoch}')
+        self.fig.suptitle(f'epoch {epoch+1}')
         for i in range(10):
             for j in range(10):
                 image, = images[10*i+j]
@@ -300,8 +312,8 @@ if __name__ == '__main__':
 
     test_noise = torch.cat((
         torch.randn(100, 62),
-        torch.eye(10)[torch.arange(10).repeat(10)].view(100, 10),
-        torch.linspace(-1, 1, 10).repeat(10, 2).view(100, 2)
+        torch.eye(10)[torch.arange(10).repeat(10)].view(100, 10),  # size(100, 10), ascend through row
+        torch.cat([*torch.linspace(-1, 1, 10).repeat(2, 10, 1).transpose(0, 2)], dim=0)  # size(100, 2), ascend through col
     ), dim=1)
 
     visualizer = Visualizer(model, test_noise)
@@ -311,13 +323,17 @@ if __name__ == '__main__':
         for batch_idx, (data, _) in enumerate(dataloader):
             model.forward(data)
             model.backward()
-            print(f'\rTrain Epoch: {epoch:2}/{opt.n_epochs} [{batch_idx * opt.batch_size:5d}/'
+            print(f'\rTrain Epoch: {epoch+1:2}/{opt.n_epochs} [{batch_idx * opt.batch_size:5d}/'
                   f'{len(dataset)} '
                   f'{"="* int(100. * batch_idx / len(dataloader) // 2) + ">":50} '
-                  f'({100. * batch_idx / len(dataloader):2.0f}%)]  '
+                  f'({100. * batch_idx / len(dataloader):3.0f}%)]  '
                   f'Loss_G: {model.loss_G:.6f} | Loss_D: {model.loss_D:.6f} | '
                   f'Loss_Q: {model.loss_Q:.6f}', end='')
-        visualizer.print_losses(epoch)
+        # visualizer.print_losses(epoch)
+        print('')
+        model.eval()
         visualizer.print_images(epoch)
         visualizer.save_images(epoch)
+        model.train()
+    model.save('./infogan.pth')
     plt.show()
