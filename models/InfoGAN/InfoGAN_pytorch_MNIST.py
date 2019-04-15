@@ -94,7 +94,7 @@ class Discriminator(nn.Module):
 
         D_logits = self.D(x)
         Q_logits = self.Q(x)
-        Q_logits[:, -2:] = torch.exp(Q_logits[:, -2:])  # to make sure stds to be positive
+        Q_logits[:, -2:] = torch.sigmoid(Q_logits[:, -2:])  # to make sure stds to be positive
 
         return D_logits, Q_logits
 
@@ -150,8 +150,8 @@ class InfoGAN:
 
             def forward(self, c, c_hat, sigma):
                 l = (c - c_hat) ** 2
-                # l /= (2 * sigma ** 2)
-                # l += torch.log(sigma)
+                l /= (2 * sigma ** 2)
+                l += torch.log(sigma)
                 return l.mean()
 
         self.criterionGAN = torch.nn.BCEWithLogitsLoss()
@@ -186,7 +186,7 @@ class InfoGAN:
         disc_logits, cont_logits = self.code_logits[:, :10], self.code_logits[:, 10:]  # 10, 4(2 means, 2 stds)
         loss_Q_disc = self.criterionCat(disc_logits, code_disc.argmax(dim=1))  # target should not be one-hot
         loss_Q_cont = self.criterionCon(code_cont, cont_logits[:, :2], cont_logits[:, 2:])
-        self.loss_Q = loss_Q_disc + loss_Q_cont
+        self.loss_Q = loss_Q_disc + loss_Q_cont * .15
         self.loss_Q.backward()
 
     def forward(self, data: torch.Tensor):
