@@ -168,13 +168,13 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
 
         url = 'https://people.eecs.berkeley.edu/~taesung_park/CycleGAN/datasets/monet2photo.zip'
         print('Downloading ' + url)
-        zippath = os.path.join(self.dest, '..', 'monet2photo.zip')
+        zippath = os.path.join(self.dest, 'monet2photo.zip')
         with open(zippath, "wb") as f:
             response = req.get(url)
             f.write(response.content)
 
         zipped = zipfile.ZipFile(zippath)
-        zipped.extractall(self.dest)
+        zipped.extractall()
         zipped.close()
 
         print('Done!')
