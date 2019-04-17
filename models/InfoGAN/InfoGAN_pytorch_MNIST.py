@@ -266,7 +266,7 @@ class Visualizer:
 
     def save_images(self, epoch):
         self.__show_images_with_plt(epoch)
-        plt.savefig(f'{opt.result_dir}/{epoch:02d}.png', bbox_inches='tight')
+        plt.savefig(f'{opt.result_dir}/{epoch+1:02d}.png', bbox_inches='tight')
 
     def __show_images_with_plt(self, epoch):
         self.model.test(self.test_noise)
@@ -287,7 +287,7 @@ if __name__ == '__main__':
 
     # make MNIST dataset
     dataset = datasets.MNIST(
-        '../../datasets', train=True, download=True,
+        '../../datasets/mnist', train=True, download=True,
         transform=transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
