@@ -55,6 +55,10 @@ class Options:
 opt = Options()
 
 
+def PATH(x):
+    return os.path.join(x, os.path.dirname(__file__))
+
+
 def resblock(dim):
     """Residual block unit of the ResNet
 
@@ -101,13 +105,19 @@ def define_D(ndf):
 class Monet2PhotoDataset(torch.utils.data.Dataset):
     """The Dataset for the task converting Monet paintings to photo"""
 
-    def __init__(self, load_size=286, crop_size=256):
+    def __init__(self, path, load_size=286, crop_size=256):
         """Brings and stores the paths of images
 
+        :param path: ~~~/datasets/monet2photo
         :param load_size: scale images to this size
         :param crop_size: then crop to this size
         """
         super().__init__()
+
+        self.dest = PATH(path)
+
+        if not os.path.exists(self.dest):
+            self.__download()
 
         self.transforms = transforms.Compose([
             transforms.Resize([load_size, load_size], Image.BICUBIC),
@@ -117,8 +127,8 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
             transforms.Normalize((.5, .5, .5), (.5, .5, .5))
         ])
 
-        self.A_dir = os.path.join('monet2photo', 'trainA')
-        self.B_dir = os.path.join('monet2photo', 'trainB')
+        self.A_dir = os.path.join(self.dest, 'trainA')
+        self.B_dir = os.path.join(self.dest, 'trainB')
         self.A_paths = os.listdir(self.A_dir)
         self.B_paths = os.listdir(self.B_dir)
         self.A_size = len(self.A_paths)
@@ -146,6 +156,28 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return max(self.A_size, self.B_size)
+
+    def __download(self):
+        import requests as req
+        import zipfile
+
+        os.makedirs(self.dest, exist_ok=True)
+        # A, B_dir이랑 A, B_path수정하면 되것다.
+
+        print('Processing...')
+
+        url = 'https://people.eecs.berkeley.edu/~taesung_park/CycleGAN/datasets/monet2photo.zip'
+        print('Downloading ' + url)
+        zippath = os.path.join(self.dest, 'monet2photo.zip')
+        with open(zippath, "wb") as f:
+            response = req.get(url)
+            f.write(response.content)
+
+        zipped = zipfile.ZipFile(zippath)
+        zipped.extractall(self.dest)
+        zipped.close()
+
+        print('Done!')
 
 
 # This class was copied from junyanz's code. I didn't touch anything.
@@ -560,7 +592,8 @@ class Visualizer:
 ########################## Monet2Photo Full Implementation ##########################
 if __name__ == '__main__':
 
-    dataset = Monet2PhotoDataset(opt.load_size, opt.crop_size)
+    dataset = Monet2PhotoDataset(
+        '../../datasets/monet2photo', opt.load_size, opt.crop_size)
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
 
@@ -590,6 +623,5 @@ if __name__ == '__main__':
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
-    # todo: 데이터 다운 받는거
     # todo: 하...체크 포인트도 넣을까?
     # todo: 저거 배치놈이면 train eval 분리해줘야 되는뎅 ㅠ
