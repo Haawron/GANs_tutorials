@@ -174,8 +174,10 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
             f.write(response.content)
 
         zipped = zipfile.ZipFile(zippath)
-        zipped.extractall()
+        zipped.extractall(os.path.join(self.dest, '..'))
         zipped.close()
+
+        os.remove(zippath)
 
         print('Done!')
 
@@ -527,7 +529,7 @@ class Visualizer:
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         plt.pause(1.)
 
-        os.makedirs(opt.result_dir, exist_ok=True)
+        os.makedirs(PATH(opt.result_dir), exist_ok=True)
 
     def print_images(self, epoch, iters, batches_per_epoch):
         self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
@@ -550,7 +552,7 @@ class Visualizer:
             if mode is 'save':
                 self.model.forward(*self.test_images)
             images = list(self.model.get_current_images().items())
-            self.fig.suptitle(f'epoch {epoch+1} iter {iters+1}')
+            self.fig.suptitle(f'epoch {epoch+1} iter {iters}')
             for i in range(2):
                 for j in range(4):
                     name, (image, *_) = images[i+2*j]
@@ -560,7 +562,7 @@ class Visualizer:
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
             if mode is 'save':
-                plt.savefig(PATH(f'{opt.result_dir}/{epoch+1:03d}_{iters+1:04d}.png'), bbox_inches='tight')
+                plt.savefig(PATH(f'{opt.result_dir}/{epoch+1:03d}_{iters:04d}.png'), bbox_inches='tight')
             elif mode is 'print':
                 plt.pause(.001)
 
