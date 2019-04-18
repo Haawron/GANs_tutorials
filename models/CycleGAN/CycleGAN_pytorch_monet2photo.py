@@ -87,9 +87,9 @@ def init_net(net) -> nn.modules:
     def init_func(m):
         if type(m) is nn.Conv2d:
             nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal has been deprecated
-        elif type(m) is nn.BatchNorm2d:
-            nn.init.normal_(m.weight.data, mean=1., std=.02)
-            nn.init.constant_(m.bias.data, val=0.)
+        # elif type(m) is nn.BatchNorm2d:
+        #     nn.init.normal_(m.weight.data, mean=1., std=.02)
+        #     nn.init.constant_(m.bias.data, val=0.)
 
     return net.apply(init_func)  # apply recursively to the net
 
@@ -385,13 +385,13 @@ class CycleGAN:
 
     def move_to(self):
         """Move Tensors to cuda if available"""
-        self.netG_A       = self.netG_A.to(self.device)
-        self.netG_B       = self.netG_B.to(self.device)
-        self.netD_A       = self.netD_A.to(self.device)
-        self.netD_B       = self.netD_B.to(self.device)
-        self.criterionGAN = self.criterionGAN.to(self.device)
-        self.true_label   = self.true_label.to(self.device)
-        self.false_label  = self.false_label.to(self.device)
+        self.netG_A       = self.netG_A.to(self.device, non_blocking=True)
+        self.netG_B       = self.netG_B.to(self.device, non_blocking=True)
+        self.netD_A       = self.netD_A.to(self.device, non_blocking=True)
+        self.netD_B       = self.netD_B.to(self.device, non_blocking=True)
+        self.criterionGAN = self.criterionGAN.to(self.device, non_blocking=True)
+        self.true_label   = self.true_label.to(self.device, non_blocking=True)
+        self.false_label  = self.false_label.to(self.device, non_blocking=True)
 
     def backward_G(self):
         """Compute losses and gradients"""
@@ -445,8 +445,8 @@ class CycleGAN:
 
     def forward(self, realA: torch.Tensor, realB: torch.Tensor):
         """Forward images to the net"""
-        self.realA = realA.to(self.device)
-        self.realB = realB.to(self.device)
+        self.realA = realA.to(self.device, non_blocking=True)
+        self.realB = realB.to(self.device, non_blocking=True)
                                               #   X   <------->   Y
         self.fakeB = self.netG_A(self.realA)  # realA  --G_A--> fakeB
         self.recoA = self.netG_B(self.fakeB)  # recoA <--G_B--  fakeB
@@ -615,7 +615,7 @@ if __name__ == '__main__':
     dataset = Monet2PhotoDataset(
         '../../datasets/monet2photo', opt.load_size, opt.crop_size)
     dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=4)
+        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=50)
 
     model = CycleGAN(
         lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
@@ -631,16 +631,20 @@ if __name__ == '__main__':
     t0_global = time.time()
     for epoch in range(opt.n_epochs):
         t0_epoch = time.time()
-        for batch_idx, (dataA, dataB) in enumerate(dataloader):
-            t0 = time.time()
-            model.forward(dataA, dataB)
-            model.backward()
-            t1 = time.time()
-            model.train()
-            visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
-            visualizer.print_images(epoch, batch_idx, len(dataloader))
-            visualizer.save_images(epoch, batch_idx, len(dataloader))
-            model.eval()
+        with torch.autograd.profiler.profile(use_cuda=True) as prof:
+            for batch_idx, (dataA, dataB) in enumerate(dataloader):
+                t0 = time.time()
+                model.forward(dataA, dataB)
+                model.backward()
+                t1 = time.time()
+                model.train()
+                visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
+                visualizer.print_images(epoch, batch_idx, len(dataloader))
+                visualizer.save_images(epoch, batch_idx, len(dataloader))
+                model.eval()
+        f = open('prof.txt', 'w')
+        f.write(str(prof))
+        f.close()
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
