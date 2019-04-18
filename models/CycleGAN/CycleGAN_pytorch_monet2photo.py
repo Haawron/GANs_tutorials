@@ -396,7 +396,7 @@ class CycleGAN:
     def backward_G(self):
         """Compute losses and gradients"""
         self.loss_G_A     = self.criterionGAN(self.netD_A(self.fakeB), self.true_label)
-        self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), self.false_label)
+        self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), self.true_label)
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
         self.loss_cycle_B = self.criterionCycle(self.recoB, self.realB)
         self.loss_idt_A   = self.criterionIdt(self.idtA, self.realB)
