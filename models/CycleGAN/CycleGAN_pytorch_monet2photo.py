@@ -531,7 +531,8 @@ class Visualizer:
         self.test_images = test_images
         self.iteration_time = 0
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
-        plt.pause(1.)
+        if not opt.liveimageoff:
+            plt.pause(1.)
 
         os.makedirs(PATH(opt.result_dir), exist_ok=True)
 
