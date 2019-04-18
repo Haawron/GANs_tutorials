@@ -48,9 +48,11 @@ parser.add_argument('--begin_decay', type=int, default=100, help='number of epoc
 parser.add_argument('--display_freq', type=int, default=500, help='iteration frequency of showing training results on screen')
 parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
+parser.add_argument('--ckpt_epoch', type=int, default=20, help='saves the model every this epoch')
+parser.add_argument('--saveoff', action='store_true', help='not save the model if True')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
 parser.add_argument('--useGTK', action='store_true', help='True if you want to run with X11 based background')
-parser.add_argument('--profile', action='store_true', help='Record profiles in txt file.')
+parser.add_argument('--profile', action='store_true', help='Record profiles in txt file')
 opt = parser.parse_args()
 
 
@@ -596,7 +598,7 @@ class Visualizer:
         if total_iters % opt.display_freq == 0 and total_iters != 0:
             time_per_data = self.iteration_time / opt.batch_size / opt.display_freq
             message = (
-                f'epoch: {epoch:3d}, iters: {iters:4d}/{batches_per_epoch}, '
+                f'epoch: {epoch+1:3d}, iters: {iters:4d}/{batches_per_epoch}, '
                 f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
                 f'total time spent: {self.sec2time(t_global)}  |  ')
             for name, loss in self.model.get_current_losses().items():
@@ -657,8 +659,9 @@ if __name__ == '__main__':
                 f.write(str(prof))
         else:
             iterate_epoch(epoch, dataloader)
+        if not opt.saveoff and epoch + 1 % opt.ckpt_epoch == 0:
+            torch.save(model.netG_A.state_dict(), 'CycleGAN_monet2photo.pth')
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
-    # todo: 하...체크 포인트도 넣을까?
