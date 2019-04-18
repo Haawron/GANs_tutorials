@@ -50,6 +50,7 @@ parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='d
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
 parser.add_argument('--useGTK', action='store_true', help='True if you want to run with X11 based background')
+parser.add_argument('--profile', action='store_true', help='Record profiles in txt file.')
 opt = parser.parse_args()
 
 
@@ -616,6 +617,19 @@ class Visualizer:
 
 
 ########################## Monet2Photo Full Implementation ##########################
+def iterate(dataA, dataB, epoch, batch_idx, N_data):
+
+    t0 = time.time()
+    model.forward(dataA, dataB)
+    model.backward()
+    t1 = time.time()
+    model.train()
+    visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, N_data)
+    visualizer.print_images(epoch, batch_idx, N_data)
+    visualizer.save_images(epoch, batch_idx, N_data)
+    model.eval()
+
+
 if __name__ == '__main__':
 
     dataset = Monet2PhotoDataset(
@@ -637,20 +651,25 @@ if __name__ == '__main__':
     t0_global = time.time()
     for epoch in range(opt.n_epochs):
         t0_epoch = time.time()
-        with torch.autograd.profiler.profile(use_cuda=True) as prof:
+        if opt.profile:
+            with torch.autograd.profiler.profile(use_cuda=True) as prof:
+                for batch_idx, (dataA, dataB) in enumerate(dataloader):
+                    # t0 = time.time()
+                    # model.forward(dataA, dataB)
+                    # model.backward()
+                    # t1 = time.time()
+                    # model.train()
+                    # visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
+                    # visualizer.print_images(epoch, batch_idx, len(dataloader))
+                    # visualizer.save_images(epoch, batch_idx, len(dataloader))
+                    # model.eval()
+                    iterate(dataA, dataB, epoch, batch_idx, len(dataloader))
+            f = open('prof.txt', 'w')
+            f.write(str(prof))
+            f.close()
+        else:
             for batch_idx, (dataA, dataB) in enumerate(dataloader):
-                t0 = time.time()
-                model.forward(dataA, dataB)
-                model.backward()
-                t1 = time.time()
-                model.train()
-                visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
-                visualizer.print_images(epoch, batch_idx, len(dataloader))
-                visualizer.save_images(epoch, batch_idx, len(dataloader))
-                model.eval()
-        f = open('prof.txt', 'w')
-        f.write(str(prof))
-        f.close()
+                iterate(dataA, dataB, epoch, batch_idx, len(dataloader))
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
