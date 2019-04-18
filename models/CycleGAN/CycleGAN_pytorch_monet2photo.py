@@ -56,7 +56,7 @@ opt = Options()
 
 
 def PATH(x):
-    return os.path.join(x, os.path.dirname(__file__))
+    return os.path.join(os.path.dirname(__file__), x)
 
 
 def resblock(dim):
@@ -174,8 +174,10 @@ class Monet2PhotoDataset(torch.utils.data.Dataset):
             f.write(response.content)
 
         zipped = zipfile.ZipFile(zippath)
-        zipped.extractall(self.dest)
+        zipped.extractall(os.path.join(self.dest, '..'))
         zipped.close()
+
+        os.remove(zippath)
 
         print('Done!')
 
@@ -274,7 +276,10 @@ class Generator(nn.Module):
         )
 
     def forward(self, *input):
-        return self.model(*input)
+        if torch.cuda.device_count() > 1:
+            return nn.DataParallel(self.model)(*input)
+        else:
+            return self.model(*input)
 
 
 class Discriminator(nn.Module):
@@ -304,7 +309,10 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, *input):
-        return self.model(*input)
+        if torch.cuda.device_count() > 1:
+            return nn.DataParallel(self.model)(*input)
+        else:
+            return self.model(*input)
 
 
 class CycleGAN:
@@ -487,6 +495,18 @@ class CycleGAN:
         lr = self.optimizerG.param_groups[0]['lr']
         print(f'learning rate = {lr:.7f}')
 
+    def train(self):
+        self.netG_A.train()
+        self.netG_B.train()
+        self.netD_A.train()
+        self.netD_B.train()
+
+    def eval(self):
+        self.netG_A.eval()
+        self.netG_B.eval()
+        self.netD_A.eval()
+        self.netD_B.eval()
+
 
 class Visualizer:
     """Visualizes the current states.
@@ -509,7 +529,7 @@ class Visualizer:
         self.fig, self.ax = plt.subplots(2, 4, figsize=(20, 10))
         plt.pause(1.)
 
-        os.makedirs(opt.result_dir, exist_ok=True)
+        os.makedirs(PATH(opt.result_dir), exist_ok=True)
 
     def print_images(self, epoch, iters, batches_per_epoch):
         self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
@@ -532,7 +552,7 @@ class Visualizer:
             if mode is 'save':
                 self.model.forward(*self.test_images)
             images = list(self.model.get_current_images().items())
-            self.fig.suptitle(f'epoch {epoch} iter {iters}')
+            self.fig.suptitle(f'epoch {epoch+1} iter {iters}')
             for i in range(2):
                 for j in range(4):
                     name, (image, *_) = images[i+2*j]
@@ -542,7 +562,7 @@ class Visualizer:
                     ax.imshow(image.detach().cpu().numpy().transpose(1, 2, 0) / 2 + .5)
                     ax.set_title(name)
             if mode is 'save':
-                plt.savefig(f'{opt.result_dir}/{epoch:03d}_{iters:04d}.png', bbox_inches='tight')
+                plt.savefig(PATH(f'{opt.result_dir}/{epoch+1:03d}_{iters:04d}.png'), bbox_inches='tight')
             elif mode is 'print':
                 plt.pause(.001)
 
@@ -616,12 +636,13 @@ if __name__ == '__main__':
             model.forward(dataA, dataB)
             model.backward()
             t1 = time.time()
+            model.train()
             visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
             visualizer.print_images(epoch, batch_idx, len(dataloader))
             visualizer.save_images(epoch, batch_idx, len(dataloader))
+            model.eval()
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
     # todo: 하...체크 포인트도 넣을까?
-    # todo: 저거 배치놈이면 train eval 분리해줘야 되는뎅 ㅠ
