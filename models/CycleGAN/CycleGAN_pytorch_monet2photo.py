@@ -20,6 +20,7 @@
 import os
 import time
 import random
+import argparse
 import matplotlib.pyplot as plt
 
 import torch
@@ -31,28 +32,25 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 
-class Options:
-    """This class makes the code similar to the original one (with argparse)"""
-    batch_size = 2  # default 1
-    image_pool_size = 50  # the size of image buffer that stores previously generated images
-    learning_rate = 2e-4
-    betas = (.5, .999)
-    n_epochs = 200
-    ngf = 64  # #filters in the last conv layer
-    ndf = 64  # #filters in the last conv layer
-
-    lambdaA = 10.  # coefficient of cycle loss
-    lambdaB = 10.  # coefficient of cycle loss
-    lambdaIdt = .5  # coefficient of identity loss
-    load_size = 286  # scale images to this size
-    crop_size = 256  # then crop to this size
-    begin_decay = 100  # #epoch beginning to decay
-    display_freq = 500  # iteration frequency of showing training results on screen
-
-    result_dir = 'resultsCycleGAN'
-
-
-opt = Options()
+parser = argparse.ArgumentParser()
+parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+parser.add_argument('--image_pool_size', type=int, default=50, help='the size of image buffer which stores previously generated images')
+parser.add_argument('--learning_rate', type=float, default=2e-4, help='learning rate')
+parser.add_argument('--betas', type=tuple, default=(.5, .999), help='betas of ADAM')
+parser.add_argument('--n_epochs', type=int, default=200, help='total training epochs')
+parser.add_argument('--ngf', type=int, default=64, help='number of filters in the last conv layer of G')
+parser.add_argument('--ndf', type=int, default=64, help='number of filters in the last conv layer of D')
+parser.add_argument('--lambdaA', type=float, default=10., help='coefficient of forward cycle loss')
+parser.add_argument('--lambdaB', type=float, default=10., help='coefficient of backward cycle loss')
+parser.add_argument('--lambdaIdt', type=float, default=.5, help='coefficient of identity loss')
+parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
+parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
+parser.add_argument('--begin_decay', type=int, default=100, help='number of epoch beginning to decay')
+parser.add_argument('--display_freq', type=int, default=500, help='iteration frequency of showing training results on screen')
+parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
+parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
+parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
+opt = parser.parse_args()
 
 
 def PATH(x):
@@ -532,7 +530,8 @@ class Visualizer:
         os.makedirs(PATH(opt.result_dir), exist_ok=True)
 
     def print_images(self, epoch, iters, batches_per_epoch):
-        self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
+        if not opt.liveimageoff:
+            self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='print')
 
     def save_images(self, epoch, iters, batches_per_epoch):
         self.__show_images_with_plt(epoch, iters, batches_per_epoch, mode='save')
@@ -569,11 +568,11 @@ class Visualizer:
     @staticmethod
     def print_options():
         """Prints options being used in this training."""
-        print(f'\n\n{" OPTIONS ":=^31}')
-        for k, v in Options.__dict__.items():
+        print(f'\n\n{" OPTIONS ":=^41}')
+        for k, v in opt.__dict__.items():
             if not k.startswith('__'):  # not for built-in members
-                print(f'{k:>15}:{v}')
-        print(f'{" END ":=^31}\n\n')
+                print(f'{k:>20}:{v}')
+        print(f'{" END ":=^41}\n\n')
 
     def print_losses(self, epoch, iters, t_comp, t_global, batches_per_epoch):
         """Prints the current losses and the computational time
@@ -615,7 +614,7 @@ if __name__ == '__main__':
     dataset = Monet2PhotoDataset(
         '../../datasets/monet2photo', opt.load_size, opt.crop_size)
     dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=50)
+        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.num_worker)
 
     model = CycleGAN(
         lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
