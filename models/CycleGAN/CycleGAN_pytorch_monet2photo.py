@@ -69,12 +69,12 @@ def resblock(dim):
 
         nn.ReflectionPad2d(1),
         nn.Conv2d(dim, dim, kernel_size=3, padding=0, bias=True),
-        nn.BatchNorm2d(dim),
+        nn.InstanceNorm2d(dim),
         nn.ReLU(inplace=True),
 
         nn.ReflectionPad2d(1),
         nn.Conv2d(dim, dim, kernel_size=3, padding=0, bias=True),
-        nn.BatchNorm2d(dim)
+        nn.InstanceNorm2d(dim)
 
     )
 
