@@ -21,7 +21,6 @@ import os
 import time
 import random
 import argparse
-import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -50,7 +49,14 @@ parser.add_argument('--display_freq', type=int, default=500, help='iteration fre
 parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
+parser.add_argument('--useGTK', action='store_true', help='True if you want to run with X11 based background')
 opt = parser.parse_args()
+
+
+if opt.useGTK:
+    import matplotlib as mpl
+    mpl.use('TKAgg')
+import matplotlib.pyplot as plt
 
 
 def PATH(x):
