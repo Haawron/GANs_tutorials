@@ -659,9 +659,9 @@ if __name__ == '__main__':
                 f.write(str(prof))
         else:
             iterate_epoch(epoch, dataloader)
-        if not opt.saveoff and epoch + 1 % opt.ckpt_epoch == 0:
+        if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
             torch.save(model.netG_A.state_dict(), 'CycleGAN_monet2photo.pth')
-        print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
+        print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
