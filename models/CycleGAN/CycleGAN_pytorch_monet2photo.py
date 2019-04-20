@@ -49,6 +49,7 @@ parser.add_argument('--display_freq', type=int, default=500, help='iteration fre
 parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
 parser.add_argument('--ckpt_epoch', type=int, default=20, help='saves the model every this epoch')
+parser.add_argument('--resumetrain', type=str, default=None, help='resume training if you pass the .pth file directory path')
 parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
 parser.add_argument('--useGTK', action='store_true', help='True if you want to run on X11 based background')
@@ -502,6 +503,15 @@ class CycleGAN:
         lr = self.optimizerG.param_groups[0]['lr']
         print(f'learning rate = {lr:.7f}')
 
+    def save(self):
+        dirname = PATH('CycleGAN_monet2photo_paths')
+        filename = os.path.join(dirname, 'CycleGAN_monet2photo_{}.pth')
+        os.makedirs(dirname, exist_ok=True)
+        torch.save(self.netG_A.state_dict(), filename.format('G_A'))
+        torch.save(self.netG_B.state_dict(), filename.format('G_B'))
+        torch.save(self.netD_A.state_dict(), filename.format('D_A'))
+        torch.save(self.netD_B.state_dict(), filename.format('D_B'))
+
     def train(self):
         self.netG_A.train()
         self.netG_B.train()
@@ -646,11 +656,11 @@ if __name__ == '__main__':
             model.forward(dataA, dataB)
             model.backward()
             t1 = time.time()
-            model.train()
+            model.eval()
             visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader), len(dataset))
             visualizer.print_images(epoch, batch_idx, len(dataloader))
             visualizer.save_images(epoch, batch_idx, len(dataloader))
-            model.eval()
+            model.train()
 
     test_images = next(iter(dataloader))
     visualizer = Visualizer(model, test_images)
@@ -667,9 +677,9 @@ if __name__ == '__main__':
                 f.write(str(prof))
         else:
             iterate_epoch(epoch, dataloader)
-        if not opt.saveoff and epoch + 1 % opt.ckpt_epoch == 0:
-            torch.save(model.netG_A.state_dict(), 'CycleGAN_monet2photo.pth')
-        print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
+        if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
+            torch.save(model.netG_A.state_dict(), PATH('CycleGAN_monet2photo.pth'))
+        print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         print("=" * 99)
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
