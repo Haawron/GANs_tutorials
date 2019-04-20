@@ -507,10 +507,10 @@ class CycleGAN:
         dirname = PATH('CycleGAN_monet2photo_paths')
         filename = os.path.join(dirname, 'CycleGAN_monet2photo_{}.pth')
         os.makedirs(dirname, exist_ok=True)
-        torch.save(self.netG_A.state_dict(), filename.format('G_A'))
-        torch.save(self.netG_B.state_dict(), filename.format('G_B'))
-        torch.save(self.netD_A.state_dict(), filename.format('D_A'))
-        torch.save(self.netD_B.state_dict(), filename.format('D_B'))
+        torch.save(self.netG_A.state_dict(), filename.format('GA'))
+        torch.save(self.netG_B.state_dict(), filename.format('GB'))
+        torch.save(self.netD_A.state_dict(), filename.format('DA'))
+        torch.save(self.netD_B.state_dict(), filename.format('DB'))
 
     def train(self):
         self.netG_A.train()
@@ -670,15 +670,15 @@ if __name__ == '__main__':
     t0_global = time.time()
     for epoch in range(opt.n_epochs):
         t0_epoch = time.time()
+
         if opt.profile:
-            with torch.autograd.profiler.profile(use_cuda=True) as prof:
-                iterate_epoch(epoch, dataloader)
-            with open('prof.txt', 'w') as f:
-                f.write(str(prof))
-        else:
-            iterate_epoch(epoch, dataloader)
+            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(epoch, dataloader)
+            with open('prof.txt', 'w') as f: f.write(str(prof))
+        else: iterate_epoch(epoch, dataloader)
+
         if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
-            torch.save(model.netG_A.state_dict(), PATH('CycleGAN_monet2photo.pth'))
+            model.save()
+
         print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         print("=" * 99)
         model.update_learning_rate()
