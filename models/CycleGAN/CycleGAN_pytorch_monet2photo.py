@@ -639,7 +639,7 @@ class Visualizer:
                 f'ETA: {self.sec2time(eta)}'
             )
             for name, loss in self.model.get_current_losses().items():
-                loss_format = '6.3f' if name is 'G' else '.3f'
+                loss_format = '6.3f' if name in ["G", "D"] else '.3f'
                 message += (
                     f'{nl + " " * 12 if name in ["G", "D"] else ""}'
                     f'{name}: {loss:{loss_format}} ')
@@ -704,7 +704,7 @@ if __name__ == '__main__':
             model.save(epoch + 1, time.time() - t0_global + prev_training_time)
 
         print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
-        print("=" * 99)
+        print("=" * 99, '\n\n')
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
