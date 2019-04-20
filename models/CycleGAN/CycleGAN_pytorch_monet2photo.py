@@ -48,7 +48,7 @@ parser.add_argument('--begin_decay', type=int, default=100, help='number of epoc
 parser.add_argument('--display_freq', type=int, default=500, help='iteration frequency of showing training results on screen')
 parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
-parser.add_argument('--ckpt_epoch', type=int, default=20, help='saves the model every this epoch')
+parser.add_argument('--ckpt_epoch', type=int, default=10, help='saves the model every this epoch')
 parser.add_argument('--resumetrain', type=str, default=None, help='resume training if you pass the .pth file directory path')
 parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
@@ -341,6 +341,8 @@ class CycleGAN:
         self.lambdaB = lambdaB
         self.lambdaIdt = lambdaIdt  # coefficient of Identity losses
 
+        self.savefile = PATH('CycleGAN_ckpt.pth')
+
         self.true_label = torch.tensor(1.)
         self.false_label = torch.tensor(0.)
 
@@ -503,14 +505,33 @@ class CycleGAN:
         lr = self.optimizerG.param_groups[0]['lr']
         print(f'learning rate = {lr:.7f}')
 
-    def save(self):
-        dirname = PATH('CycleGAN_monet2photo_paths')
-        filename = os.path.join(dirname, 'CycleGAN_monet2photo_{}.pth')
-        os.makedirs(dirname, exist_ok=True)
-        torch.save(self.netG_A.state_dict(), filename.format('GA'))
-        torch.save(self.netG_B.state_dict(), filename.format('GB'))
-        torch.save(self.netD_A.state_dict(), filename.format('DA'))
-        torch.save(self.netD_B.state_dict(), filename.format('DB'))
+    def save(self, epoch, total_time):
+        """
+
+        :param epoch: epoch that has just finished. Training will begin from (epoch + 1).
+        :param total_time:
+        :return:
+        """
+        torch.save({
+            'epoch': epoch,
+            'total time': total_time,
+            'G_A': self.netG_A.state_dict(),
+            'G_B': self.netG_B.state_dict(),
+            'D_A': self.netD_A.state_dict(),
+            'D_B': self.netD_B.state_dict(),
+            'optimizerG': self.optimizerG.state_dict(),
+            'optimizerD': self.optimizerD.state_dict()
+        }, self.savefile)
+
+    def load(self) -> tuple:
+        checkpoint = torch.load(self.savefile)
+        self.netG_A.load_state_dict(checkpoint['G_A'])
+        self.netG_B.load_state_dict(checkpoint['G_B'])
+        self.netD_A.load_state_dict(checkpoint['D_A'])
+        self.netD_B.load_state_dict(checkpoint['D_B'])
+        self.optimizerG.load_state_dict(checkpoint['optimizerG'])
+        self.optimizerD.load_state_dict(checkpoint['optimizerD'])
+        return checkpoint['epoch'], checkpoint['total_time']
 
     def train(self):
         self.netG_A.train()
@@ -609,12 +630,12 @@ class Visualizer:
         total_iters = epoch * batches_per_epoch + iters
         if total_iters % opt.display_freq == 0 and total_iters != 0:
             time_per_data = self.iteration_time / opt.batch_size / opt.display_freq
-            eta = n_data * opt.n_epochs * time_per_data
+            eta = (n_data * (opt.n_epochs - epoch) - (iters + 1) * opt.batch_size) * time_per_data
             message = (
                 f'[epoch: {epoch+1:3d}, iters: {iters:4d}/{batches_per_epoch}]\n'
                 f'{"":12}'
                 f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
-                f'total time spent: {self.sec2time(t_global)}, '
+                f'total training time: {self.sec2time(t_global)}, '
                 f'ETA: {self.sec2time(eta)}'
             )
             for name, loss in self.model.get_current_losses().items():
@@ -636,6 +657,19 @@ class Visualizer:
         )
 
 
+def iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader):
+    for batch_idx, (dataA, dataB) in enumerate(dataloader):
+        t0 = time.time()
+        model.forward(dataA, dataB)
+        model.backward()
+        t1 = time.time()
+        model.eval()
+        visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global + prev_training_time, len(dataloader), len(dataset))
+        visualizer.print_images(epoch, batch_idx, len(dataloader))
+        visualizer.save_images(epoch, batch_idx, len(dataloader))
+        model.train()
+
+
 ########################## Monet2Photo Full Implementation ##########################
 if __name__ == '__main__':
 
@@ -650,17 +684,7 @@ if __name__ == '__main__':
         lambdaA=opt.lambdaA, lambdaB=opt.lambdaB, lambdaIdt=opt.lambdaIdt
     )
 
-    def iterate_epoch(epoch, dataloader):
-        for batch_idx, (dataA, dataB) in enumerate(dataloader):
-            t0 = time.time()
-            model.forward(dataA, dataB)
-            model.backward()
-            t1 = time.time()
-            model.eval()
-            visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader), len(dataset))
-            visualizer.print_images(epoch, batch_idx, len(dataloader))
-            visualizer.save_images(epoch, batch_idx, len(dataloader))
-            model.train()
+    start_epoch, prev_training_time = model.load() if opt.resumetrain else 0, 0
 
     test_images = next(iter(dataloader))
     visualizer = Visualizer(model, test_images)
@@ -668,16 +692,16 @@ if __name__ == '__main__':
     visualizer.print_options()
     print('Let\'s begin the training!\n')
     t0_global = time.time()
-    for epoch in range(opt.n_epochs):
+    for epoch in range(start_epoch, opt.n_epochs):
         t0_epoch = time.time()
 
         if opt.profile:
-            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(epoch, dataloader)
+            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader)
             with open('prof.txt', 'w') as f: f.write(str(prof))
-        else: iterate_epoch(epoch, dataloader)
+        else: iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader)
 
         if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
-            model.save()
+            model.save(epoch + 1, time.time() - t0_global + prev_training_time)
 
         print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         print("=" * 99)
