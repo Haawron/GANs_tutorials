@@ -49,9 +49,9 @@ parser.add_argument('--display_freq', type=int, default=500, help='iteration fre
 parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
 parser.add_argument('--ckpt_epoch', type=int, default=20, help='saves the model every this epoch')
-parser.add_argument('--saveoff', action='store_true', help='not save the model if True')
+parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
-parser.add_argument('--useGTK', action='store_true', help='True if you want to run with X11 based background')
+parser.add_argument('--useGTK', action='store_true', help='True if you want to run on X11 based background')
 parser.add_argument('--profile', action='store_true', help='Record profiles in txt file')
 opt = parser.parse_args()
 
@@ -584,7 +584,7 @@ class Visualizer:
                 print(f'{k:>20}:{v}')
         print(f'{" END ":=^41}\n\n')
 
-    def print_losses(self, epoch, iters, t_comp, t_global, batches_per_epoch):
+    def print_losses(self, epoch, iters, t_comp, t_global, batches_per_epoch, n_data):
         """Prints the current losses and the computational time
 
         :param epoch: current epoch
@@ -592,19 +592,27 @@ class Visualizer:
         :param t_comp: computational time per batch
         :param t_global: total time spent during this training
         :param batches_per_epoch: number of batches per epoch
+        :param n_data: number of total data
         """
+        nl = '\n'  # to embed in f-string
         self.iteration_time += t_comp
         total_iters = epoch * batches_per_epoch + iters
         if total_iters % opt.display_freq == 0 and total_iters != 0:
             time_per_data = self.iteration_time / opt.batch_size / opt.display_freq
+            eta = n_data * opt.n_epochs * time_per_data
             message = (
-                f'epoch: {epoch+1:3d}, iters: {iters:4d}/{batches_per_epoch}, '
+                f'[epoch: {epoch+1:3d}, iters: {iters:4d}/{batches_per_epoch}]\n'
+                f'{"":12}'
                 f'time: {self.iteration_time:.3f}s, time/data: {time_per_data:.3f}s, '
-                f'total time spent: {self.sec2time(t_global)}  |  ')
+                f'total time spent: {self.sec2time(t_global)}, '
+                f'ETA: {self.sec2time(eta)}'
+            )
             for name, loss in self.model.get_current_losses().items():
                 loss_format = '6.3f' if name is 'G' else '.3f'
-                message += f'{" |  D" if name is "D" else name}: {loss:{loss_format}} '
-            print(message)
+                message += (
+                    f'{nl + " " * 12 if name in ["G", "D"] else ""}'
+                    f'{name}: {loss:{loss_format}} ')
+            print(message, '\n')
             self.iteration_time = 0
 
     @staticmethod
@@ -613,8 +621,8 @@ class Visualizer:
         h, m = divmod(m, 60)
         d, h = divmod(h, 24)
         return (
-            f'{d if d != 0 else ""}d'
-            f'{h:2d}h {m:02d}m {s:02d}s'
+            f'{f"{d}d " if d != 0 else ""}'
+            f'{h}h {m:02d}m {s:02d}s'
         )
 
 
@@ -639,7 +647,7 @@ if __name__ == '__main__':
             model.backward()
             t1 = time.time()
             model.train()
-            visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader))
+            visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global, len(dataloader), len(dataset))
             visualizer.print_images(epoch, batch_idx, len(dataloader))
             visualizer.save_images(epoch, batch_idx, len(dataloader))
             model.eval()
@@ -662,6 +670,7 @@ if __name__ == '__main__':
         if not opt.saveoff and epoch + 1 % opt.ckpt_epoch == 0:
             torch.save(model.netG_A.state_dict(), 'CycleGAN_monet2photo.pth')
         print(f'End of Epoch {epoch:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
+        print("=" * 99)
         model.update_learning_rate()
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
     plt.show()
