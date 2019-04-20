@@ -613,7 +613,7 @@ class Visualizer:
         h, m = divmod(m, 60)
         d, h = divmod(h, 24)
         return (
-            f'{d}d' if d != 0 else ''
+            f'{d if d != 0 else ""}d'
             f'{h:2d}h {m:02d}m {s:02d}s'
         )
 
