@@ -341,8 +341,6 @@ class CycleGAN:
         self.lambdaB = lambdaB
         self.lambdaIdt = lambdaIdt  # coefficient of Identity losses
 
-        self.savefile = PATH('CycleGAN_ckpt.pth')
-
         self.true_label = torch.tensor(1.)
         self.false_label = torch.tensor(0.)
 
@@ -512,6 +510,7 @@ class CycleGAN:
         :param total_time:
         :return:
         """
+        savefile = PATH('CycleGAN_ckpt.pth')
         torch.save({
             'epoch': epoch,
             'total time': total_time,
@@ -521,10 +520,10 @@ class CycleGAN:
             'D_B': self.netD_B.state_dict(),
             'optimizerG': self.optimizerG.state_dict(),
             'optimizerD': self.optimizerD.state_dict()
-        }, self.savefile)
+        }, savefile)
 
-    def load(self) -> tuple:
-        checkpoint = torch.load(self.savefile)
+    def load(self, path='auto') -> tuple:
+        checkpoint = torch.load(PATH('CycleGAN_ckpt.pth') if path == 'auto' else path)
         self.netG_A.load_state_dict(checkpoint['G_A'])
         self.netG_B.load_state_dict(checkpoint['G_B'])
         self.netD_A.load_state_dict(checkpoint['D_A'])
@@ -657,14 +656,14 @@ class Visualizer:
         )
 
 
-def iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader):
+def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, n_data):
     for batch_idx, (dataA, dataB) in enumerate(dataloader):
         t0 = time.time()
         model.forward(dataA, dataB)
         model.backward()
         t1 = time.time()
         model.eval()
-        visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global + prev_training_time, len(dataloader), len(dataset))
+        visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global + prev_training_time, len(dataloader), n_data)
         visualizer.print_images(epoch, batch_idx, len(dataloader))
         visualizer.save_images(epoch, batch_idx, len(dataloader))
         model.train()
@@ -684,7 +683,7 @@ if __name__ == '__main__':
         lambdaA=opt.lambdaA, lambdaB=opt.lambdaB, lambdaIdt=opt.lambdaIdt
     )
 
-    start_epoch, prev_training_time = model.load() if opt.resumetrain else 0, 0
+    start_epoch, prev_training_time = model.load(opt.resumetrain) if opt.resumetrain else 0, 0
 
     test_images = next(iter(dataloader))
     visualizer = Visualizer(model, test_images)
@@ -696,9 +695,9 @@ if __name__ == '__main__':
         t0_epoch = time.time()
 
         if opt.profile:
-            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader)
+            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
             with open('prof.txt', 'w') as f: f.write(str(prof))
-        else: iterate_epoch(model, epoch, t0_global, prev_training_time, dataloader)
+        else: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
 
         if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
             model.save(epoch + 1, time.time() - t0_global + prev_training_time)
@@ -706,5 +705,5 @@ if __name__ == '__main__':
         print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
         print("=" * 99, '\n\n')
         model.update_learning_rate()
-    print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global)}')
+    print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global+prev_training_time)}')
     plt.show()
