@@ -679,44 +679,43 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
 
 
 ########################## Monet2Photo Full Implementation ##########################
-if __name__ == '__main__':
 
-    datapath = os.path.join('..', '..', 'datasets', 'monet2photo')
-    dataset = Monet2PhotoDataset(
-        datapath, opt.load_size, opt.crop_size)
-    dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.num_worker)
+datapath = os.path.join('..', '..', 'datasets', 'monet2photo')
+dataset = Monet2PhotoDataset(
+    datapath, opt.load_size, opt.crop_size)
+dataloader = torch.utils.data.DataLoader(
+    dataset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.num_worker)
 
-    model = CycleGAN(
-        lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
-        ngf=opt.ngf, ndf=opt.ndf,
-        lambdaA=opt.lambdaA, lambdaB=opt.lambdaB, lambdaIdt=opt.lambdaIdt
-    )
+model = CycleGAN(
+    lr=opt.learning_rate, betas=opt.betas, n_epochs=opt.n_epochs,
+    ngf=opt.ngf, ndf=opt.ndf,
+    lambdaA=opt.lambdaA, lambdaB=opt.lambdaB, lambdaIdt=opt.lambdaIdt
+)
 
-    start_epoch, prev_training_time = model.load(opt.resumetrain) if opt.resumetrain else 0, 0
+start_epoch, prev_training_time = model.load(opt.resumetrain) if opt.resumetrain else 0, 0
 
-    get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB'))
-    test_imageA = get_image(os.path.join(PATH(datapath), 'testA', '00050.jpg'))
-    test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05_00_46.jpg'))
-    test_images = test_imageA, test_imageB
-    visualizer = Visualizer(model, test_images)
+get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB'))
+test_imageA = get_image(os.path.join(PATH(datapath), 'testA', '00050.jpg'))
+test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05_00_46.jpg'))
+test_images = test_imageA, test_imageB
+visualizer = Visualizer(model, test_images)
 
-    visualizer.print_options()
-    print('Let\'s begin the training!\n')
-    t0_global = time.time()
-    for epoch in range(start_epoch, opt.n_epochs):
-        t0_epoch = time.time()
+visualizer.print_options()
+print('Let\'s begin the training!\n')
+t0_global = time.time()
+for epoch in range(start_epoch, opt.n_epochs):
+    t0_epoch = time.time()
 
-        if opt.profile:
-            with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
-            with open('prof.txt', 'w') as f: f.write(str(prof))
-        else: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
+    if opt.profile:
+        with torch.autograd.profiler.profile(use_cuda=True) as prof: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
+        with open('prof.txt', 'w') as f: f.write(str(prof))
+    else: iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, len(dataset))
 
-        if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
-            model.save(epoch + 1, time.time() - t0_global + prev_training_time)
+    if not opt.saveoff and (epoch + 1) % opt.ckpt_epoch == 0:
+        model.save(epoch + 1, time.time() - t0_global + prev_training_time)
 
-        print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
-        model.update_learning_rate()
-        print("=" * 99, '\n\n')
-    print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global+prev_training_time)}')
-    plt.show()
+    print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
+    model.update_learning_rate()
+    print("=" * 99, '\n\n')
+print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global+prev_training_time)}')
+plt.show()
