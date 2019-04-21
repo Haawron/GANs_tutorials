@@ -703,7 +703,7 @@ if __name__ == '__main__':
             model.save(epoch + 1, time.time() - t0_global + prev_training_time)
 
         print(f'End of Epoch {epoch+1:3d} Time spent: {visualizer.sec2time(time.time()-t0_epoch)}')
-        print("=" * 99, '\n\n')
         model.update_learning_rate()
+        print("=" * 99, '\n\n')
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global+prev_training_time)}')
     plt.show()
