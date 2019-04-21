@@ -681,8 +681,9 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
 ########################## Monet2Photo Full Implementation ##########################
 if __name__ == '__main__':
 
+    datapath = os.path.join('..', '..', 'datasets', 'monet2photo')
     dataset = Monet2PhotoDataset(
-        '../../datasets/monet2photo', opt.load_size, opt.crop_size)
+        datapath, opt.load_size, opt.crop_size)
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=opt.batch_size, shuffle=True, num_workers=opt.num_worker)
 
@@ -694,7 +695,10 @@ if __name__ == '__main__':
 
     start_epoch, prev_training_time = model.load(opt.resumetrain) if opt.resumetrain else 0, 0
 
-    test_images = next(iter(dataloader))
+    get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB'))
+    test_imageA = get_image(os.path.join(PATH(datapath), 'testA', '00050.jpg'))
+    test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05_00_46.jpg'))
+    test_images = test_imageA, test_imageB
     visualizer = Visualizer(model, test_images)
 
     visualizer.print_options()
