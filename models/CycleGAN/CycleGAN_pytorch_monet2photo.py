@@ -28,6 +28,8 @@ import torch.utils.data
 import torch.optim as optim
 import torchvision.transforms as transforms
 
+from utils.parallel import DataParallelModel, DataParallelCriterion
+
 from PIL import Image
 
 
@@ -103,11 +105,17 @@ def init_net(net) -> nn.modules:
 
 
 def define_G(ngf):
-    return init_net(Generator(ngf))
+    if torch.cuda.device_count() > 1:
+        return DataParallelModel(init_net(Generator(ngf)))
+    else:
+        return init_net(Generator(ngf))
 
 
 def define_D(ndf):
-    return init_net(Discriminator(ndf))
+    if torch.cuda.device_count() > 1:
+        return DataParallelModel(init_net(Discriminator(ndf)))
+    else:
+        return init_net(Discriminator(ndf))
 
 
 class Monet2PhotoDataset(torch.utils.data.Dataset):
@@ -284,10 +292,7 @@ class Generator(nn.Module):
         )
 
     def forward(self, *input):
-        if torch.cuda.device_count() > 1:
-            return nn.DataParallel(self.model)(*input)
-        else:
-            return self.model(*input)
+        return self.model(*input)
 
 
 class Discriminator(nn.Module):
@@ -317,10 +322,7 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, *input):
-        if torch.cuda.device_count() > 1:
-            return nn.DataParallel(self.model)(*input)
-        else:
-            return self.model(*input)
+        return self.model(*input)
 
 
 class CycleGAN:
@@ -377,6 +379,11 @@ class CycleGAN:
         self.criterionCycle = nn.L1Loss()
         self.criterionIdt = nn.L1Loss()
 
+        if torch.cuda.device_count() > 1:
+            self.criterionGAN = DataParallelCriterion(self.criterionGAN)
+            self.criterionCycle = DataParallelCriterion(self.criterionCycle)
+            self.criterionIdt = DataParallelCriterion(self.criterionIdt)
+
     def define_optimizers(self):
         """Define optimizers"""
         self.optimizerG = optim.Adam(self.G_params, lr=self.learning_rate, betas=self.betas)
@@ -398,6 +405,8 @@ class CycleGAN:
         self.netD_A       = self.netD_A.to(self.device, non_blocking=True)
         self.netD_B       = self.netD_B.to(self.device, non_blocking=True)
         self.criterionGAN = self.criterionGAN.to(self.device, non_blocking=True)
+        self.criterionCycle= self.criterionCycle.to(self.device, non_blocking=True)
+        self.criterionIdt = self.criterionIdt.to(self.device, non_blocking=True)
         self.true_label   = self.true_label.to(self.device, non_blocking=True)
         self.false_label  = self.false_label.to(self.device, non_blocking=True)
 
