@@ -89,35 +89,6 @@ def resblock(dim):
     )
 
 
-def init_net(net) -> nn.modules:
-    """Apply the weight initialization method through the all layers of the net
-
-    :return: initialized net
-    """
-    def init_func(m):
-        if type(m) is nn.Conv2d:
-            nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal has been deprecated
-        # elif type(m) is nn.BatchNorm2d:
-        #     nn.init.normal_(m.weight.data, mean=1., std=.02)
-        #     nn.init.constant_(m.bias.data, val=0.)
-
-    return net.apply(init_func)  # apply recursively to the net
-
-
-def define_G(ngf):
-    if torch.cuda.device_count() > 1:
-        return DataParallelModel(init_net(Generator(ngf)))
-    else:
-        return init_net(Generator(ngf))
-
-
-def define_D(ndf):
-    if torch.cuda.device_count() > 1:
-        return DataParallelModel(init_net(Discriminator(ndf)))
-    else:
-        return init_net(Discriminator(ndf))
-
-
 class Monet2PhotoDataset(torch.utils.data.Dataset):
     """The Dataset for the task converting Monet paintings to photo"""
 
@@ -292,6 +263,8 @@ class Generator(nn.Module):
         )
 
     def forward(self, *input):
+        # if isinstance(input, list):
+        #     return self.model(torch.cat(input))
         return self.model(*input)
 
 
@@ -321,8 +294,39 @@ class Discriminator(nn.Module):
 
         )
 
-    def forward(self, *input):
-        return self.model(*input)
+    def forward(self, input):
+        # if isinstance(input, list):
+        #     return self.model(torch.cat(input))
+        return self.model(input)
+
+
+def init_net(net) -> nn.modules:
+    """Apply the weight initialization method through the all layers of the net
+
+    :return: initialized net
+    """
+    def init_func(m):
+        if type(m) is nn.Conv2d:
+            nn.init.normal_(m.weight.data, mean=0., std=.02)  # init.normal has been deprecated
+        # elif type(m) is nn.BatchNorm2d:
+        #     nn.init.normal_(m.weight.data, mean=1., std=.02)
+        #     nn.init.constant_(m.bias.data, val=0.)
+
+    return net.apply(init_func)  # apply recursively to the net
+
+
+def define_G(ngf):
+    if torch.cuda.device_count() > 1:
+        return DataParallelModel(init_net(Generator(ngf)))
+    else:
+        return init_net(Generator(ngf))
+
+
+def define_D(ndf):
+    if torch.cuda.device_count() > 1:
+        return DataParallelModel(init_net(Discriminator(ndf)))
+    else:
+        return init_net(Discriminator(ndf))
 
 
 class CycleGAN:
@@ -412,8 +416,10 @@ class CycleGAN:
 
     def backward_G(self):
         """Compute losses and gradients"""
-        self.loss_G_A     = self.criterionGAN(self.netD_A(self.fakeB), self.true_label)
-        self.loss_G_B     = self.criterionGAN(self.netD_B(self.fakeA), self.true_label)
+        pred_A = self.netD_A(self.fakeB)
+        pred_B = self.netD_B(self.fakeA)
+        self.loss_G_A     = self.criterionGAN(pred_A, self.true_label.repeat(opt.batch_size, *pred_A[0].size()))
+        self.loss_G_B     = self.criterionGAN(pred_B, self.true_label.repeat(opt.batch_size, *pred_B[0].size()))
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
         self.loss_cycle_B = self.criterionCycle(self.recoB, self.realB)
         self.loss_idt_A   = self.criterionIdt(self.idtA, self.realB)
@@ -697,7 +703,7 @@ def train():
 
     get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB'))
     test_imageA = get_image(os.path.join(PATH(datapath), 'testA', '00050.jpg'))
-    test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05_00_46.jpg'))
+    test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05:00:46.jpg'))
     test_images = test_imageA, test_imageB
     visualizer = Visualizer(model, test_images)
 
@@ -720,3 +726,5 @@ def train():
         print("=" * 99, '\n\n')
     print(f'End of the Training, Total Time Spent: {visualizer.sec2time(time.time()-t0_global+prev_training_time)}')
     plt.show()
+
+if __name__=='__main__': train()
