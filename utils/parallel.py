@@ -93,6 +93,8 @@ class DataParallelModel(DataParallel):
 
     def forward(self, inputs, **kwargs):
         # super의 forward는 머가 들어오든 scatter 해버려서 분기해줘야댐
+        if kwargs.get('parallel'):
+            self.module(inputs[0])
         if isinstance(inputs, torch.Tensor):
             return super().forward(inputs, **kwargs)
         replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
