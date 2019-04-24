@@ -93,13 +93,15 @@ class DataParallelModel(DataParallel):
 
     def forward(self, inputs, **kwargs):
         # super의 forward는 머가 들어오든 scatter 해버려서 분기해줘야댐
-        if kwargs.get('parallel'):
-            self.module(inputs[0])
-        if isinstance(inputs, torch.Tensor):
-            return super().forward(inputs, **kwargs)
-        replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
-        outputs = self.parallel_apply(replicas, inputs, kwargs if kwargs else None)
-        return self.gather(outputs, self.output_device)
+        if kwargs.get('parallel', False):
+            kwargs.pop('parallel', None)  # this key is unexpected
+            if isinstance(inputs, torch.Tensor):
+                return super().forward(inputs, **kwargs)
+            replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
+            outputs = self.parallel_apply(replicas, inputs, kwargs if kwargs else None)
+            return self.gather(outputs, self.output_device)
+        else:  # not using parallel or evaluating
+            return self.module(inputs)
 
 
 class DataParallelCriterion(DataParallel):

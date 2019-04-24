@@ -52,6 +52,7 @@ parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='d
 parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
 parser.add_argument('--ckpt_epoch', type=int, default=10, help='saves the model every this epoch')
 parser.add_argument('--resumetrain', type=str, default=None, help='resume training if you pass the .pth file directory path')
+parser.add_argument('--parallel', action='store_true', help='Train the model in parallel way. Not recommended for evaluation')
 parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
 parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
 parser.add_argument('--useGTK', action='store_true', help='True if you want to run on X11 based background')
@@ -314,14 +315,14 @@ def init_net(net) -> nn.modules:
 
 
 def define_G(ngf):
-    if torch.cuda.device_count() > 1:
+    if opt.parallel and torch.cuda.device_count() > 1:
         return DataParallelModel(init_net(Generator(ngf)))
     else:
         return init_net(Generator(ngf))
 
 
 def define_D(ndf):
-    if torch.cuda.device_count() > 1:
+    if opt.parallel and torch.cuda.device_count() > 1:
         return DataParallelModel(init_net(Discriminator(ndf)))
     else:
         return init_net(Discriminator(ndf))
@@ -381,7 +382,7 @@ class CycleGAN:
         self.criterionCycle = nn.L1Loss()
         self.criterionIdt = nn.L1Loss()
 
-        if torch.cuda.device_count() > 1:
+        if opt.parallel and torch.cuda.device_count() > 1:
             self.criterionGAN = DataParallelCriterion(self.criterionGAN)
             self.criterionCycle = DataParallelCriterion(self.criterionCycle)
             self.criterionIdt = DataParallelCriterion(self.criterionIdt)
@@ -414,8 +415,8 @@ class CycleGAN:
 
     def backward_G(self):
         """Compute losses and gradients"""
-        pred_A = self.netD_A(self.fakeB)
-        pred_B = self.netD_B(self.fakeA)
+        pred_A = self.netD_A(self.fakeB, parallel=opt.parallel)
+        pred_B = self.netD_B(self.fakeA, parallel=opt.parallel)
         self.loss_G_A     = self.criterionGAN(pred_A, self.true_label.repeat(opt.batch_size, *pred_A[0][0].size()))
         self.loss_G_B     = self.criterionGAN(pred_B, self.true_label.repeat(opt.batch_size, *pred_B[0][0].size()))
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
@@ -436,8 +437,8 @@ class CycleGAN:
 
     def compute_loss_D_basic(self, netD, real, fake):
         """Compute losses of corresponding discriminator"""
-        pred_real = netD(real)
-        pred_fake = netD(fake.detach())
+        pred_real = netD(real, parallel=opt.parallel)
+        pred_fake = netD(fake.detach(), parallel=opt.parallel)
         loss_D_real = self.criterionGAN(pred_real, self.true_label.repeat(opt.batch_size, *pred_real[0][0].size()))
         loss_D_fake = self.criterionGAN(pred_fake, self.false_label.repeat(opt.batch_size, *pred_fake[0][0].size()))
         loss_D = (loss_D_real + loss_D_fake) / 2
@@ -464,19 +465,19 @@ class CycleGAN:
         self.loss_D = self.loss_D_A + self.loss_D_B
         self.loss_D.backward()
 
-    def forward(self, realA: torch.Tensor, realB: torch.Tensor):
+    def forward(self, realA: torch.Tensor, realB: torch.Tensor, parallel=opt.parallel):
         """Forward images to the net"""
         self.realA = realA.to(self.device, non_blocking=True)
         self.realB = realB.to(self.device, non_blocking=True)
-                                              #   X   <------->   Y
-        self.fakeB = self.netG_A(self.realA)  # realA  --G_A--> fakeB
-        self.recoA = self.netG_B(self.fakeB)  # recoA <--G_B--  fakeB
-        self.fakeA = self.netG_B(self.realB)  # fakeA <--G_B--  realB
-        self.recoB = self.netG_A(self.fakeA)  # fakeA  --G_A--> recoB
+                                                                 #   X   <------->   Y
+        self.fakeB = self.netG_A(self.realA, parallel=parallel)  # realA  --G_A--> fakeB
+        self.recoA = self.netG_B(self.fakeB, parallel=parallel)  # recoA <--G_B--  fakeB
+        self.fakeA = self.netG_B(self.realB, parallel=parallel)  # fakeA <--G_B--  realB
+        self.recoB = self.netG_A(self.fakeA, parallel=parallel)  # fakeA  --G_A--> recoB
 
-        # to preserve color composition      #      X              Y
-        self.idtA = self.netG_A(self.realB)  # G_B--> idtB   realB ----⌍
-        self.idtB = self.netG_B(self.realA)  #  ⌎---- realA   idtA <--G_A
+        # to preserve color composition                         #      X              Y
+        self.idtA = self.netG_A(self.realB, parallel=parallel)  # G_B--> idtB   realB ----⌍
+        self.idtB = self.netG_B(self.realA, parallel=parallel)  #  ⌎---- realA   idtA <--G_A
 
     def backward(self):
         """Optimize the parameters"""
@@ -602,7 +603,7 @@ class Visualizer:
         total_iters = epoch * batches_per_epoch + iters
         if total_iters % opt.display_freq == 0:
             if mode is 'save':
-                self.model.forward(*self.test_images)
+                self.model.forward(*self.test_images, parallel=False)
             images = list(self.model.get_current_images().items())
             self.fig.suptitle(f'epoch {epoch+1} iter {iters}')
             for i in range(2):
@@ -678,7 +679,7 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
         model.eval()
         visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global + prev_training_time, len(dataloader), n_data)
         visualizer.print_images(epoch, batch_idx, len(dataloader))
-        # visualizer.save_images(epoch, batch_idx, len(dataloader))
+        visualizer.save_images(epoch, batch_idx, len(dataloader))  # 텐서가 들어가면 scatter 해버려서 뭔가 명시해 줘야댐
         model.train()
         print('success!')
 
