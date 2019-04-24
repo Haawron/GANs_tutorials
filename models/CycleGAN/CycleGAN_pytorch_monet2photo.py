@@ -33,32 +33,35 @@ from utils.parallel import DataParallelModel, DataParallelCriterion
 from PIL import Image
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-parser.add_argument('--image_pool_size', type=int, default=50, help='the size of image buffer which stores previously generated images')
-parser.add_argument('--learning_rate', type=float, default=2e-4, help='learning rate')
-parser.add_argument('--betas', type=tuple, default=(.5, .999), help='betas of ADAM')
-parser.add_argument('--n_epochs', type=int, default=200, help='total training epochs')
-parser.add_argument('--ngf', type=int, default=64, help='number of filters in the last conv layer of G')
-parser.add_argument('--ndf', type=int, default=64, help='number of filters in the last conv layer of D')
-parser.add_argument('--lambdaA', type=float, default=10., help='coefficient of forward cycle loss')
-parser.add_argument('--lambdaB', type=float, default=10., help='coefficient of backward cycle loss')
-parser.add_argument('--lambdaIdt', type=float, default=.5, help='coefficient of identity loss')
-parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
-parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
-parser.add_argument('--begin_decay', type=int, default=100, help='number of epoch beginning to decay')
-parser.add_argument('--display_freq', type=int, default=500, help='iteration frequency of showing training results on screen')
-parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
-parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
-parser.add_argument('--ckpt_epoch', type=int, default=10, help='saves the model every this epoch')
-parser.add_argument('--resumetrain', type=str, default=None, help='resume training if you pass the .pth file directory path')
-parser.add_argument('--parallel', action='store_true', help='Train the model in parallel way. Not recommended for evaluation')
-parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
-parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
-parser.add_argument('--useGTK', action='store_true', help='True if you want to run on X11 based background')
-parser.add_argument('--profile', action='store_true', help='Record profiles in txt file')
-opt = parser.parse_args()
+def initialize():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+    parser.add_argument('--image_pool_size', type=int, default=50, help='the size of image buffer which stores previously generated images')
+    parser.add_argument('--learning_rate', type=float, default=2e-4, help='learning rate')
+    parser.add_argument('--betas', type=tuple, default=(.5, .999), help='betas of ADAM')
+    parser.add_argument('--n_epochs', type=int, default=200, help='total training epochs')
+    parser.add_argument('--ngf', type=int, default=64, help='number of filters in the last conv layer of G')
+    parser.add_argument('--ndf', type=int, default=64, help='number of filters in the last conv layer of D')
+    parser.add_argument('--lambdaA', type=float, default=10., help='coefficient of forward cycle loss')
+    parser.add_argument('--lambdaB', type=float, default=10., help='coefficient of backward cycle loss')
+    parser.add_argument('--lambdaIdt', type=float, default=.5, help='coefficient of identity loss')
+    parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
+    parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
+    parser.add_argument('--begin_decay', type=int, default=100, help='number of epoch beginning to decay')
+    parser.add_argument('--display_freq', type=int, default=500, help='iteration frequency of showing training results on screen')
+    parser.add_argument('--result_dir', type=str, default='resultsCycleGAN', help='directory in which result images will be stored')
+    parser.add_argument('--num_worker', type=int, default=4, help='number of workers for Dataloader')
+    parser.add_argument('--ckpt_epoch', type=int, default=10, help='saves the model every this epoch')
+    parser.add_argument('--resumetrain', type=str, default=None, help='resume training if you pass the .pth file directory path')
+    parser.add_argument('--parallel', action='store_true', help='Train the model in parallel way. Not recommended for evaluation')
+    parser.add_argument('--saveoff', action='store_true', help='True if you do not want to save the model')
+    parser.add_argument('--liveimageoff', action='store_true', help='turn off the live image update with matplotlib')
+    parser.add_argument('--useGTK', action='store_true', help='True if you want to run on X11 based background')
+    parser.add_argument('--profile', action='store_true', help='Record profiles in txt file')
+    return parser.parse_args()
 
+
+opt = initialize()
 
 if opt.useGTK:
     import matplotlib as mpl
@@ -672,6 +675,9 @@ class Visualizer:
 
 def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, dataloader, n_data):
     for batch_idx, (dataA, dataB) in enumerate(dataloader):
+        if opt.parallel and dataA.size()[0] != opt.batch_size:
+            # leftovers(?) like the last minibatch of an epoch may cause an error
+            continue
         t0 = time.time()
         model.forward(dataA, dataB)
         model.backward()
@@ -681,7 +687,6 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
         visualizer.print_images(epoch, batch_idx, len(dataloader))
         visualizer.save_images(epoch, batch_idx, len(dataloader))  # 텐서가 들어가면 scatter 해버려서 뭔가 명시해 줘야댐
         model.train()
-        print('success!')
 
 
 ########################## Monet2Photo Full Implementation ##########################
