@@ -203,7 +203,7 @@ class ImagePool:
         if self.pool_size == 0:  # if the buffer size is 0, do nothing
             return images
         return_images = []
-        for image, in images:
+        for image in images:
             # image = torch.unsqueeze(image.data, 0)
             if self.num_imgs < self.pool_size:  # if the buffer is not full; keep inserting current images to the buffer
                 self.num_imgs = self.num_imgs + 1
@@ -294,10 +294,8 @@ class Discriminator(nn.Module):
 
         )
 
-    def forward(self, input):
-        # if isinstance(input, list):
-        #     return self.model(torch.cat(input))
-        return self.model(input)
+    def forward(self, *input):
+        return self.model(*input)
 
 
 def init_net(net) -> nn.modules:
@@ -682,6 +680,7 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
         visualizer.print_images(epoch, batch_idx, len(dataloader))
         # visualizer.save_images(epoch, batch_idx, len(dataloader))
         model.train()
+        print('success!')
 
 
 ########################## Monet2Photo Full Implementation ##########################
@@ -701,7 +700,7 @@ def train():
 
     start_epoch, prev_training_time = model.load(opt.resumetrain) if opt.resumetrain else 0, 0
 
-    get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB'))
+    get_image = lambda path: dataset.transforms(Image.open(path).convert('RGB')).unsqueeze_(0)
     test_imageA = get_image(os.path.join(PATH(datapath), 'testA', '00050.jpg'))
     test_imageB = get_image(os.path.join(PATH(datapath), 'testB', '2014-12-07 05:00:46.jpg'))
     test_images = test_imageA, test_imageB

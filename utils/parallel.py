@@ -18,7 +18,6 @@ from torch.nn.parallel.data_parallel import DataParallel
 from torch.nn.parallel.parallel_apply import get_a_var
 from torch.nn.parallel._functions import ReduceAddCoalesced, Broadcast
 
-torch_ver = torch.__version__[:3]
 
 __all__ = ['allreduce', 'DataParallelModel', 'DataParallelCriterion']
 
@@ -93,20 +92,11 @@ class DataParallelModel(DataParallel):
         return modules
 
     def forward(self, inputs, **kwargs):
+        # super의 forward는 머가 들어오든 scatter 해버려서 분기해줘야댐
         if isinstance(inputs, torch.Tensor):
-            inputs = [inputs]
-        elif isinstance(inputs[0], torch.Tensor):
-            inputs = tuple([input] for input in inputs)
-        if not self.device_ids:
-            return self.module(*inputs, **kwargs)
-        if len(inputs) != len(self.device_ids):
-            inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
-            # why are inputs scattered in tuple of lists of tensor?
-            # inputs = [x[0] for x in inputs]
-        if len(self.device_ids) == 1:
-            return self.module(*inputs[0], **kwargs[0])
+            return super().forward(inputs, **kwargs)
         replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
-        outputs = _module_parallel_apply(replicas, inputs, kwargs)
+        outputs = self.parallel_apply(replicas, inputs, kwargs if kwargs else None)
         return self.gather(outputs, self.output_device)
 
 
@@ -139,59 +129,6 @@ class DataParallelCriterion(DataParallel):
         return Reduce.apply(*outputs) / len(outputs)
 
 
-def _module_parallel_apply(modules, inputs, kwargs_tup=None, devices=None):
-    assert len(modules) == len(inputs)
-    if kwargs_tup:
-        assert len(modules) == len(kwargs_tup)
-    else:
-        kwargs_tup = ({},) * len(modules)
-    if devices is not None:
-        assert len(modules) == len(devices)
-    else:
-        devices = [None] * len(modules)
-
-    lock = threading.Lock()
-    results = {}
-    if torch_ver != "0.3":
-        grad_enabled = torch.is_grad_enabled()
-
-    def _worker(i, module, input, kwargs, device=None):
-        if torch_ver != "0.3":
-            torch.set_grad_enabled(grad_enabled)
-        if device is None:
-            device = get_a_var(input).get_device()
-        try:
-            with torch.cuda.device(device):
-                output = module(*input, **kwargs)
-            with lock:
-                results[i] = output
-        except Exception as e:
-            with lock:
-                results[i] = e
-
-    if len(modules) > 1:
-        threads = [threading.Thread(target=_worker,
-                                    args=(i, module, input,
-                                          kwargs, device),)
-                   for i, (module, input, kwargs, device) in
-                   enumerate(zip(modules, inputs, kwargs_tup, devices))]
-
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-    else:
-        _worker(0, modules[0], inputs[0], kwargs_tup[0], devices[0])
-
-    outputs = []
-    for i in range(len(inputs)):
-        output = results[i]
-        if isinstance(output, Exception):
-            raise output
-        outputs.append((output,))
-    return outputs
-
-
 def _criterion_parallel_apply(modules, inputs, targets, kwargs_tup=None, devices=None):
     assert len(modules) == len(inputs)
     assert len(targets) == len(inputs)
@@ -206,16 +143,16 @@ def _criterion_parallel_apply(modules, inputs, targets, kwargs_tup=None, devices
 
     lock = threading.Lock()
     results = {}
-    if torch_ver != "0.3":
-        grad_enabled = torch.is_grad_enabled()
+    grad_enabled = torch.is_grad_enabled()
 
     def _worker(i, module, input, target, kwargs, device=None):
-        if torch_ver != "0.3":
-            torch.set_grad_enabled(grad_enabled)
+        torch.set_grad_enabled(grad_enabled)
         if device is None:
             device = get_a_var(input).get_device()
         try:
             with torch.cuda.device(device):
+                if not isinstance(input, (list, tuple)):
+                    input = (input,)
                 output = module(*(input + target), **kwargs)
             with lock:
                 results[i] = output
