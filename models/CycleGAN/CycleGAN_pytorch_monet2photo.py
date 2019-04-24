@@ -203,8 +203,8 @@ class ImagePool:
         if self.pool_size == 0:  # if the buffer size is 0, do nothing
             return images
         return_images = []
-        for image in images:
-            image = torch.unsqueeze(image.data, 0)
+        for image, in images:
+            # image = torch.unsqueeze(image.data, 0)
             if self.num_imgs < self.pool_size:  # if the buffer is not full; keep inserting current images to the buffer
                 self.num_imgs = self.num_imgs + 1
                 self.images.append(image)
@@ -418,8 +418,8 @@ class CycleGAN:
         """Compute losses and gradients"""
         pred_A = self.netD_A(self.fakeB)
         pred_B = self.netD_B(self.fakeA)
-        self.loss_G_A     = self.criterionGAN(pred_A, self.true_label.repeat(opt.batch_size, *pred_A[0].size()))
-        self.loss_G_B     = self.criterionGAN(pred_B, self.true_label.repeat(opt.batch_size, *pred_B[0].size()))
+        self.loss_G_A     = self.criterionGAN(pred_A, self.true_label.repeat(opt.batch_size, *pred_A[0][0].size()))
+        self.loss_G_B     = self.criterionGAN(pred_B, self.true_label.repeat(opt.batch_size, *pred_B[0][0].size()))
         self.loss_cycle_A = self.criterionCycle(self.recoA, self.realA)
         self.loss_cycle_B = self.criterionCycle(self.recoB, self.realB)
         self.loss_idt_A   = self.criterionIdt(self.idtA, self.realB)
@@ -440,8 +440,8 @@ class CycleGAN:
         """Compute losses of corresponding discriminator"""
         pred_real = netD(real)
         pred_fake = netD(fake.detach())
-        loss_D_real = self.criterionGAN(pred_real, self.true_label)
-        loss_D_fake = self.criterionGAN(pred_fake, self.false_label)
+        loss_D_real = self.criterionGAN(pred_real, self.true_label.repeat(opt.batch_size, *pred_real[0][0].size()))
+        loss_D_fake = self.criterionGAN(pred_fake, self.false_label.repeat(opt.batch_size, *pred_fake[0][0].size()))
         loss_D = (loss_D_real + loss_D_fake) / 2
         return loss_D
 
@@ -680,7 +680,7 @@ def iterate_epoch(model, visualizer, epoch, t0_global, prev_training_time, datal
         model.eval()
         visualizer.print_losses(epoch, batch_idx, t1 - t0, t1 - t0_global + prev_training_time, len(dataloader), n_data)
         visualizer.print_images(epoch, batch_idx, len(dataloader))
-        visualizer.save_images(epoch, batch_idx, len(dataloader))
+        # visualizer.save_images(epoch, batch_idx, len(dataloader))
         model.train()
 
 

@@ -95,9 +95,14 @@ class DataParallelModel(DataParallel):
     def forward(self, inputs, **kwargs):
         if isinstance(inputs, torch.Tensor):
             inputs = [inputs]
+        elif isinstance(inputs[0], torch.Tensor):
+            inputs = tuple([input] for input in inputs)
         if not self.device_ids:
             return self.module(*inputs, **kwargs)
-        inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+        if len(inputs) != len(self.device_ids):
+            inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+            # why are inputs scattered in tuple of lists of tensor?
+            # inputs = [x[0] for x in inputs]
         if len(self.device_ids) == 1:
             return self.module(*inputs[0], **kwargs[0])
         replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
@@ -183,7 +188,7 @@ def _module_parallel_apply(modules, inputs, kwargs_tup=None, devices=None):
         output = results[i]
         if isinstance(output, Exception):
             raise output
-        outputs.append(output)
+        outputs.append((output,))
     return outputs
 
 
